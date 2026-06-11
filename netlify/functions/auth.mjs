@@ -1,16 +1,35 @@
-const SUPABASE_URL     = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE = process.env.SUPABASE_SERVICE_KEY;
+import { getStore } from '@netlify/blobs';
 
 const headers = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
+const json = (status, obj) => new Response(JSON.stringify(obj), { status, headers });
+
+// ── Storage: Netlify Blobs (built into the site — no external DB) ────────────
+// One blob per user, keyed by lowercased email. id === email everywhere.
+function store() { return getStore({ name: 'pt-users', consistency: 'strong' }); }
+async function getUser(email) {
+  if (!email) return null;
+  try { return await store().get(email.toLowerCase(), { type: 'json' }); } catch { return null; }
+}
+async function putUser(email, data) { await store().setJSON(email.toLowerCase(), data); }
+async function listAllUsers() {
+  const s = store();
+  const { blobs } = await s.list();
+  const users = [];
+  for (const b of blobs) {
+    const u = await s.get(b.key, { type: 'json' });
+    if (u) users.push(u);
+  }
+  return users.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+}
 
 async function hashPin(pin, salt) {
   const s = salt || crypto.randomUUID();
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s + pin + 'pt-salt-2026'));
-  const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   return { hash: `${s}:${hash}` };
 }
 async function verifyPin(pin, stored) {
@@ -18,23 +37,15 @@ async function verifyPin(pin, stored) {
   const { hash } = await hashPin(pin, salt);
   return hash === stored;
 }
-async function sb(method, path, body) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
-    method,
-    headers: { 'apikey': SUPABASE_SERVICE, 'Authorization': `Bearer ${SUPABASE_SERVICE}`, 'Content-Type': 'application/json', 'Prefer': method === 'POST' ? 'return=representation' : 'return=minimal' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  try { return { ok: res.ok, status: res.status, data: JSON.parse(text) }; }
-  catch { return { ok: res.ok, status: res.status, data: text }; }
+function getInitials(name) { return name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2); }
+function isAdmin(role) { return ['admin', 'marketing', 'executive'].includes(role); }
+async function requireAdmin(email) {
+  const u = await getUser(email);
+  return !!(u && u.status === 'active' && isAdmin(u.role));
 }
-async function logEvent(email, event, actor) {
-  await sb('POST', '/pt_user_events', { user_email: email, event, actor }).catch(() => {});
+function publicUser(u) {
+  return { id: u.email, email: u.email, name: u.name, role: u.role, initials: u.initials, title: u.title, status: u.status, created_at: u.created_at, last_login: u.last_login };
 }
-function getInitials(name) { return name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0,2); }
-function isAdmin(role) { return ['admin','marketing','executive'].includes(role); }
-
-const ALLOWED_EMAIL = 'dhamby@pureturfllc.com';
 
 // Server-authoritative team roster. Identity + role come from here (never from the
 // client) so nobody can grant themselves a role. Roster members are pre-approved and
@@ -53,127 +64,132 @@ const ROSTER = {
   'lauren@canvasbranding.com': { name: 'Lauren Hamby',    role: 'marketing', title: 'Marketing',              initials: 'LH' },
 };
 
-export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
-  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: 'Method not allowed' };
+export default async (req) => {
+  if (req.method === 'OPTIONS') return new Response('', { status: 200, headers });
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers });
   let body;
-  try { body = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
+  try { body = await req.json(); } catch { return json(400, { error: 'Invalid JSON' }); }
   const { action } = body;
+  const now = new Date().toISOString();
 
-  if (action === 'signup') {
-    const { email, name, pin } = body;
-    if (!email || !name || !pin) return { statusCode: 400, headers, body: JSON.stringify({ error: 'email, name, and pin required' }) };
-    if (email.toLowerCase() !== ALLOWED_EMAIL) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access is currently restricted' }) };
-    if (!/^\d{4}$/.test(pin)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'PIN must be 4 digits' }) };
-    const existing = await sb('GET', `/pt_users?email=eq.${encodeURIComponent(email.toLowerCase())}&select=id,status`);
-    if (existing.ok && existing.data?.length > 0) {
-      const u = existing.data[0];
-      if (u.status === 'pending')  return { statusCode: 409, headers, body: JSON.stringify({ error: 'Account request already submitted — awaiting approval.' }) };
-      if (u.status === 'active')   return { statusCode: 409, headers, body: JSON.stringify({ error: 'An account with this email already exists.' }) };
-      if (u.status === 'disabled') return { statusCode: 409, headers, body: JSON.stringify({ error: 'This account has been disabled. Contact your admin.' }) };
+  try {
+    // ── STATUS: does this person need to create a PIN? (no PIN required) ──────
+    if (action === 'status') {
+      const e = (body.email || '').toLowerCase();
+      const roster = ROSTER[e];
+      const user = await getUser(e);
+      if (!user && !roster) return json(200, { ok: true, known: false, needsPinSetup: false });
+      if (user && user.status === 'disabled') return json(200, { ok: true, known: true, disabled: true });
+      return json(200, { ok: true, known: true, needsPinSetup: !user || !user.pin_hash });
     }
-    const { hash } = await hashPin(pin);
-    const result = await sb('POST', '/pt_users', { email: email.toLowerCase(), name: name.trim(), pin_hash: hash, role: 'pending', status: 'pending', initials: getInitials(name.trim()), title: 'Team Member' });
-    if (!result.ok) return { statusCode: 500, headers, body: JSON.stringify({ error: 'Could not create account. Try again.' }) };
-    await logEvent(email, 'signup', email);
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true, message: 'Account request submitted. An admin will approve your access shortly.' }) };
-  }
 
-  if (action === 'login') {
-    const { email, pin } = body;
-    if (!email || !pin) return { statusCode: 400, headers, body: JSON.stringify({ error: 'email and pin required' }) };
-    const e = email.toLowerCase();
-    const roster = ROSTER[e];
-    const result = await sb('GET', `/pt_users?email=eq.${encodeURIComponent(e)}&select=*`);
-    const user = (result.ok && result.data?.length) ? result.data[0] : null;
+    // ── LOGIN ──────────────────────────────────────────────────────────────
+    if (action === 'login') {
+      const { email, pin } = body;
+      if (!email || !pin) return json(400, { error: 'email and pin required' });
+      const e = email.toLowerCase();
+      const roster = ROSTER[e];
+      const user = await getUser(e);
 
-    // No PIN on file yet → first-time setup (roster members are pre-approved).
-    if (!user || !user.pin_hash) {
-      if (roster || user) return { statusCode: 200, headers, body: JSON.stringify({ ok: false, needsPinSetup: true }) };
-      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access is restricted. Ask an admin to add you.' }) };
+      // No PIN on file yet → first-time setup (roster members are pre-approved).
+      if (!user || !user.pin_hash) {
+        if (roster || user) return json(200, { ok: false, needsPinSetup: true });
+        return json(403, { error: 'Access is restricted. Ask an admin to add you.' });
+      }
+      if (!roster && user.status === 'pending') return json(403, { error: 'Your account is awaiting approval.' });
+      if (user.status === 'disabled')           return json(403, { error: 'Your account has been disabled.' });
+      const valid = await verifyPin(pin, user.pin_hash);
+      if (!valid) return json(401, { error: 'Incorrect PIN.' });
+      const r = roster || user;
+      await putUser(e, { ...user, name: r.name, role: r.role, title: r.title, initials: r.initials, last_login: now });
+      return json(200, { ok: true, user: { email: e, name: r.name, role: r.role, initials: r.initials, title: r.title } });
     }
-    if (!roster && user.status === 'pending')  return { statusCode: 403, headers, body: JSON.stringify({ error: 'Your account is awaiting approval.' }) };
-    if (user.status === 'disabled')            return { statusCode: 403, headers, body: JSON.stringify({ error: 'Your account has been disabled.' }) };
-    const valid = await verifyPin(pin, user.pin_hash);
-    if (!valid) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Incorrect PIN.' }) };
-    await sb('PATCH', `/pt_users?id=eq.${user.id}`, { last_login: new Date().toISOString() });
-    await logEvent(e, 'login', e);
-    // Identity/role from the roster when present (authoritative), else from the row.
-    const r = roster || user;
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true, user: { email: e, name: r.name, role: r.role, initials: r.initials, title: r.title } }) };
-  }
 
-  // First-time PIN claim (or completing a reset). Allowed for roster members or rows
-  // that have no PIN yet; refuses to overwrite an already-set PIN (admin must reset).
-  if (action === 'set-pin') {
-    const { email, pin } = body;
-    if (!email || !pin) return { statusCode: 400, headers, body: JSON.stringify({ error: 'email and pin required' }) };
-    if (!/^\d{4}$/.test(pin)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'PIN must be 4 digits' }) };
-    const e = email.toLowerCase();
-    const roster = ROSTER[e];
-    const existing = await sb('GET', `/pt_users?email=eq.${encodeURIComponent(e)}&select=*`);
-    const user = (existing.ok && existing.data?.length) ? existing.data[0] : null;
-    if (!roster && !user) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access is restricted.' }) };
-    if (user && user.pin_hash && user.status !== 'disabled') return { statusCode: 409, headers, body: JSON.stringify({ error: 'A PIN is already set. Ask an admin to reset it.' }) };
-    const { hash } = await hashPin(pin);
-    if (user) {
-      await sb('PATCH', `/pt_users?id=eq.${user.id}`, { pin_hash: hash, status: 'active', last_login: new Date().toISOString(), ...(roster ? { name: roster.name, role: roster.role, title: roster.title, initials: roster.initials } : {}) });
-    } else {
-      const res = await sb('POST', '/pt_users', { email: e, name: roster.name, role: roster.role, title: roster.title, initials: roster.initials, pin_hash: hash, status: 'active', last_login: new Date().toISOString() });
-      if (!res.ok) return { statusCode: 500, headers, body: JSON.stringify({ error: 'Could not create account. Try again.' }) };
+    // ── SET PIN (first-time claim, or after an admin reset) ──────────────────
+    if (action === 'set-pin') {
+      const { email, pin } = body;
+      if (!email || !pin) return json(400, { error: 'email and pin required' });
+      if (!/^\d{4}$/.test(pin)) return json(400, { error: 'PIN must be 4 digits' });
+      const e = email.toLowerCase();
+      const roster = ROSTER[e];
+      const user = await getUser(e);
+      if (!roster && !user) return json(403, { error: 'Access is restricted.' });
+      if (user && user.pin_hash && user.status !== 'disabled') return json(409, { error: 'A PIN is already set. Ask an admin to reset it.' });
+      const { hash } = await hashPin(pin);
+      const ident = roster || user || {};
+      const merged = {
+        email: e,
+        name: ident.name || user?.name,
+        role: ident.role || user?.role || 'sales',
+        title: ident.title || user?.title || 'Team Member',
+        initials: ident.initials || user?.initials || getInitials(ident.name || e),
+        pin_hash: hash,
+        status: 'active',
+        created_at: user?.created_at || now,
+        last_login: now,
+      };
+      await putUser(e, merged);
+      return json(200, { ok: true, user: { email: e, name: merged.name, role: merged.role, initials: merged.initials, title: merged.title } });
     }
-    await logEvent(e, 'set-pin', e);
-    const r = roster || user;
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true, user: { email: e, name: r.name, role: r.role, initials: r.initials, title: r.title } }) };
-  }
 
-  // Admin clears a user's PIN so they set a new one on next login (forgot-PIN path).
-  if (action === 'reset-pin') {
-    const { requester_email, user_id, email } = body;
-    const req = await sb('GET', `/pt_users?email=eq.${encodeURIComponent((requester_email || '').toLowerCase())}&select=role,status`);
-    if (!req.ok || !req.data?.length || req.data[0].status !== 'active' || !isAdmin(req.data[0].role)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
-    const target = user_id ? `id=eq.${user_id}` : `email=eq.${encodeURIComponent((email || '').toLowerCase())}`;
-    await sb('PATCH', `/pt_users?${target}`, { pin_hash: null });
-    await logEvent(email || user_id, 'reset-pin', requester_email);
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
-  }
+    // ── ADMIN: reset a user's PIN (they re-claim on next login) ───────────────
+    if (action === 'reset-pin') {
+      const { requester_email, user_id, email } = body;
+      if (!(await requireAdmin(requester_email))) return json(403, { error: 'Unauthorized' });
+      const target = (user_id || email || '').toLowerCase();
+      const u = await getUser(target);
+      if (u) await putUser(target, { ...u, pin_hash: null });
+      return json(200, { ok: true });
+    }
 
-  if (action === 'list-pending') {
-    const { requester_email } = body;
-    const req = await sb('GET', `/pt_users?email=eq.${encodeURIComponent(requester_email)}&select=role,status`);
-    if (!req.ok || !req.data?.length || req.data[0].status !== 'active' || !isAdmin(req.data[0].role)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
-    const pending = await sb('GET', '/pt_users?status=eq.pending&select=id,email,name,initials,title,created_at&order=created_at.asc');
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true, pending: pending.data || [] }) };
-  }
+    // ── ADMIN: list all users (roster + claimed) ─────────────────────────────
+    if (action === 'list-users') {
+      const { requester_email } = body;
+      if (!(await requireAdmin(requester_email))) return json(403, { error: 'Unauthorized' });
+      const stored = await listAllUsers();
+      const byEmail = new Map(stored.map(u => [u.email, u]));
+      for (const [e, r] of Object.entries(ROSTER)) {
+        if (!byEmail.has(e)) byEmail.set(e, { email: e, name: r.name, role: r.role, title: r.title, initials: r.initials });
+      }
+      const users = [...byEmail.values()].map(u => ({ ...publicUser(u), status: u.status === 'disabled' ? 'disabled' : (u.pin_hash ? 'active' : 'not_set_up') }));
+      return json(200, { ok: true, users });
+    }
 
-  if (action === 'approve') {
-    const { requester_email, user_id, role } = body;
-    const req = await sb('GET', `/pt_users?email=eq.${encodeURIComponent(requester_email)}&select=role,status`);
-    if (!req.ok || !req.data?.length || req.data[0].status !== 'active' || !isAdmin(req.data[0].role)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
-    const approvedRole = ['sales','executive','marketing','admin'].includes(role) ? role : 'sales';
-    const userRes = await sb('GET', `/pt_users?id=eq.${user_id}&select=email`);
-    await sb('PATCH', `/pt_users?id=eq.${user_id}`, { status: 'active', role: approvedRole, approved_at: new Date().toISOString(), approved_by: requester_email });
-    await logEvent(userRes.data?.[0]?.email, 'approved', requester_email);
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
-  }
+    // ── ADMIN: disable / re-enable a user ────────────────────────────────────
+    if (action === 'disable' || action === 'reject') {
+      const { requester_email, user_id, email } = body;
+      if (!(await requireAdmin(requester_email))) return json(403, { error: 'Unauthorized' });
+      const target = (user_id || email || '').toLowerCase();
+      const u = await getUser(target);
+      if (u) await putUser(target, { ...u, status: 'disabled' });
+      return json(200, { ok: true });
+    }
+    if (action === 'enable') {
+      const { requester_email, user_id, email } = body;
+      if (!(await requireAdmin(requester_email))) return json(403, { error: 'Unauthorized' });
+      const target = (user_id || email || '').toLowerCase();
+      const u = await getUser(target);
+      if (u) await putUser(target, { ...u, status: 'active' });
+      return json(200, { ok: true });
+    }
 
-  if (action === 'reject' || action === 'disable') {
-    const { requester_email, user_id } = body;
-    const req = await sb('GET', `/pt_users?email=eq.${encodeURIComponent(requester_email)}&select=role,status`);
-    if (!req.ok || !req.data?.length || req.data[0].status !== 'active' || !isAdmin(req.data[0].role)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
-    const userRes = await sb('GET', `/pt_users?id=eq.${user_id}&select=email`);
-    await sb('PATCH', `/pt_users?id=eq.${user_id}`, { status: 'disabled' });
-    await logEvent(userRes.data?.[0]?.email, action, requester_email);
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
-  }
+    // ── ADMIN: remove a user entirely ────────────────────────────────────────
+    if (action === 'delete-user') {
+      const { requester_email, user_id, email } = body;
+      if (!(await requireAdmin(requester_email))) return json(403, { error: 'Unauthorized' });
+      const target = (user_id || email || '').toLowerCase();
+      try { await store().delete(target); } catch {}
+      return json(200, { ok: true });
+    }
 
-  if (action === 'list-users') {
-    const { requester_email } = body;
-    const req = await sb('GET', `/pt_users?email=eq.${encodeURIComponent(requester_email)}&select=role,status`);
-    if (!req.ok || !req.data?.length || req.data[0].status !== 'active' || !isAdmin(req.data[0].role)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
-    const all = await sb('GET', '/pt_users?select=id,email,name,initials,title,role,status,created_at,last_login&order=created_at.asc');
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true, users: all.data || [] }) };
-  }
+    // ── Legacy actions kept as graceful no-ops (roster self-claim replaces them) ──
+    if (action === 'list-pending') return json(200, { ok: true, pending: [] });
+    if (action === 'approve')      return json(200, { ok: true });
+    if (action === 'signup')       return json(200, { ok: true, message: 'Just tap your name on the sign-in screen and create your PIN.' });
 
-  return { statusCode: 400, headers, body: JSON.stringify({ error: `Unknown action: ${action}` }) };
+    return json(400, { error: `Unknown action: ${action}` });
+  } catch (err) {
+    console.error('auth error:', err);
+    return json(500, { error: err.message });
+  }
 };

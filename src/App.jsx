@@ -929,6 +929,27 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
     setUserMsg('User disabled.');
   };
 
+  const doResetPin = async (userId) => {
+    if (!window.confirm(`Reset PIN for ${userId}? They'll create a new one at their next login.`)) return;
+    setUserMsg('');
+    await fetch('/.netlify/functions/auth', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'reset-pin', requester_email: currentUser.email, user_id: userId }),
+    });
+    fetchAllUsers();
+    setUserMsg('PIN reset — they will create a new one at next login.');
+  };
+
+  const doEnable = async (userId) => {
+    setUserMsg('');
+    await fetch('/.netlify/functions/auth', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'enable', requester_email: currentUser.email, user_id: userId }),
+    });
+    fetchAllUsers();
+    setUserMsg('User re-enabled.');
+  };
+
 
   const availableTabs = [
     ...(canSetCompGoals ? [{ id:'goals',  label:'Company Goals' }] : []),
@@ -1243,7 +1264,8 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
                   {allUsers.filter(u => u.email !== currentUser?.email).map(u => {
                     const lastLogin = u.last_login ? new Date(u.last_login).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'Never';
                     const isActive = u.status === 'active';
-                    const isPending = u.status === 'pending';
+                    const notSetUp = u.status === 'not_set_up';
+                    const isDisabled = u.status === 'disabled';
                     return (
                       <div key={u.id} className={`admin-user-row${!isActive?' dimmed':''}`}>
                         <div className="au-col-user">
@@ -1260,15 +1282,16 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
                         </div>
                         <div className="au-col-login">{lastLogin}</div>
                         <div className="au-col-status">
-                          <span className={`au-status-dot${isActive?' active':isPending?' pending':' disabled'}`}/>
-                          <span style={{fontSize:11,color:'var(--text-3)'}}>{isActive?'Active':isPending?'Pending':'Disabled'}</span>
+                          <span className={`au-status-dot${isActive?' active':notSetUp?' pending':' disabled'}`}/>
+                          <span style={{fontSize:11,color:'var(--text-3)'}}>{isActive?'Active':notSetUp?'No PIN yet':'Disabled'}</span>
                         </div>
                         <div className="au-col-action">
-                          {isActive && (
+                          {isActive && (<>
+                            <button className="admin-action-btn" style={{fontSize:10,padding:'3px 10px',marginRight:6}} onClick={() => doResetPin(u.id)}>Reset PIN</button>
                             <button className="admin-action-btn admin-action-reject" style={{fontSize:10,padding:'3px 10px'}} onClick={() => doDisable(u.id)}>Disable</button>
-                          )}
-                          {isPending && (
-                            <button className="admin-action-btn admin-action-approve" style={{fontSize:10,padding:'3px 10px'}} onClick={() => doApprove(u.id)}>Approve</button>
+                          </>)}
+                          {isDisabled && (
+                            <button className="admin-action-btn admin-action-approve" style={{fontSize:10,padding:'3px 10px'}} onClick={() => doEnable(u.id)}>Enable</button>
                           )}
                         </div>
                       </div>
@@ -1369,6 +1392,8 @@ function AppInner() {
   });
   const [pin,           setPin]           = useState('');
   const [pinErr,        setPinErr]        = useState(false);
+  const [pinMode,       setPinMode]       = useState('login'); // 'login' | 'create' | 'confirm'
+  const [firstPin,      setFirstPin]      = useState('');
   const [signupName,    setSignupName]    = useState('');
   const [signupEmail,   setSignupEmail]   = useState('');
   const [signupPin,     setSignupPin]     = useState('');
@@ -1573,8 +1598,32 @@ function AppInner() {
   }, []);
 
   const checkPin = useCallback(async (p) => {
-    // Try Supabase first
-    let serverError = null;
+    const shake = () => {
+      document.querySelector('.pin-dots')?.classList.remove('shake');
+      requestAnimationFrame(() => document.querySelector('.pin-dots')?.classList.add('shake'));
+    };
+    // First-time setup: choose a PIN, then confirm it.
+    if (pinMode === 'create') {
+      setFirstPin(p); setPin(''); setPinErr(false); setEmailErr(''); setPinMode('confirm');
+      return;
+    }
+    if (pinMode === 'confirm') {
+      if (p !== firstPin) {
+        setEmailErr('PINs didn’t match — choose again.'); setFirstPin(''); setPin(''); setPinErr(true); setPinMode('create'); shake();
+        return;
+      }
+      try {
+        const res = await fetch('/.netlify/functions/auth', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'set-pin', email: selectedUser?.email, pin: p }),
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) { setPinMode('login'); setFirstPin(''); doLogin(data.user); return; }
+        setEmailErr(data.error || 'Could not set PIN.'); setPin(''); setPinErr(true); setFirstPin(''); setPinMode('login'); shake();
+      } catch { setEmailErr('Network error — try again.'); setPin(''); setPinErr(true); shake(); }
+      return;
+    }
+    // Normal login.
     try {
       const res = await fetch('/.netlify/functions/auth', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1582,20 +1631,32 @@ function AppInner() {
       });
       const data = await res.json();
       if (res.ok && data.ok) { doLogin(data.user); return; }
-      // Remember a real account error (e.g. disabled/awaiting approval) but don't block
-      // the hardcoded team roster from logging in below.
-      if (res.status === 403) serverError = data.error || 'Account not active.';
-    } catch (e) { /* network error — fall through to local */ }
-    // Fallback: hardcoded team roster
-    const localUser = USERS.find(u => u.email === selectedUser?.email);
-    if (localUser && p === localUser.pin) { doLogin(localUser); return; }
-    // Not on the roster (or wrong PIN): surface a server account message if there is
-    // one, otherwise treat as a bad PIN.
-    if (serverError && !localUser) { setPinErr(true); setPin(''); setEmailErr(serverError); return; }
-    setPinErr(true); setPin('');
-    document.querySelector('.pin-dots')?.classList.remove('shake');
-    requestAnimationFrame(() => document.querySelector('.pin-dots')?.classList.add('shake'));
-  }, [selectedUser, doLogin]);
+      if (data.needsPinSetup) { setPinMode('create'); setPin(''); setPinErr(false); setEmailErr(''); return; }
+      setPin(''); setPinErr(true); if (data.error) setEmailErr(data.error); shake();
+    } catch {
+      setPin(''); setPinErr(true); setEmailErr('Network error — try again.'); shake();
+    }
+  }, [selectedUser, doLogin, pinMode, firstPin]);
+
+  // When the PIN screen opens for a user, ask the server whether they need to
+  // create a PIN (first-time) or just enter it — so the label is right up front.
+  useEffect(() => {
+    if (loginStep !== 'pin' || !selectedUser?.email) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/.netlify/functions/auth', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'status', email: selectedUser.email }),
+        });
+        const d = await res.json();
+        if (cancelled) return;
+        setPin(''); setFirstPin(''); setPinErr(false); setEmailErr('');
+        setPinMode(d.needsPinSetup ? 'create' : 'login');
+      } catch { if (!cancelled) setPinMode('login'); }
+    })();
+    return () => { cancelled = true; };
+  }, [loginStep, selectedUser]);
 
   const submitSignup = useCallback(async (e) => {
     e?.preventDefault();
@@ -1927,9 +1988,9 @@ function AppInner() {
                   </button>
                   <div className="pin-user-av">{selectedUser?.initials}</div>
                   <div className="login-heading">{selectedUser?.name}</div>
-                  <div className="login-sub">Enter your PIN</div>
+                  <div className="login-sub">{pinMode === 'create' ? 'Create a 4-digit PIN' : pinMode === 'confirm' ? 'Re-enter to confirm' : 'Enter your PIN'}</div>
                   <div className="pin-dots">{[0,1,2,3].map(i=><div key={i} className={`pin-dot${pin.length>i?' filled':''}`}/>)}</div>
-                  {pinErr && <div className="pin-err">Incorrect PIN — try again</div>}
+                  {pinErr && pinMode === 'login' && <div className="pin-err">Incorrect PIN — try again</div>}
                   {emailErr && <div className="pin-err">{emailErr}</div>}
                   <div className="pin-pad">
                     {[1,2,3,4,5,6,7,8,9].map(n=><button key={n} className="pin-key" onClick={()=>pressKey(String(n))}>{n}</button>)}
