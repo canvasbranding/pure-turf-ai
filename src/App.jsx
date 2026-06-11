@@ -1574,6 +1574,7 @@ function AppInner() {
 
   const checkPin = useCallback(async (p) => {
     // Try Supabase first
+    let serverError = null;
     try {
       const res = await fetch('/.netlify/functions/auth', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1581,16 +1582,19 @@ function AppInner() {
       });
       const data = await res.json();
       if (res.ok && data.ok) { doLogin(data.user); return; }
-      if (res.status === 403) { setPinErr(true); setPin(''); setEmailErr(data.error || 'Account not active.'); return; }
+      // Remember a real account error (e.g. disabled/awaiting approval) but don't block
+      // the hardcoded team roster from logging in below.
+      if (res.status === 403) serverError = data.error || 'Account not active.';
     } catch (e) { /* network error — fall through to local */ }
-    // Fallback: hardcoded users
+    // Fallback: hardcoded team roster
     const localUser = USERS.find(u => u.email === selectedUser?.email);
-    if (localUser && p === localUser.pin) { doLogin(localUser); }
-    else {
-      setPinErr(true); setPin('');
-      document.querySelector('.pin-dots')?.classList.remove('shake');
-      requestAnimationFrame(() => document.querySelector('.pin-dots')?.classList.add('shake'));
-    }
+    if (localUser && p === localUser.pin) { doLogin(localUser); return; }
+    // Not on the roster (or wrong PIN): surface a server account message if there is
+    // one, otherwise treat as a bad PIN.
+    if (serverError && !localUser) { setPinErr(true); setPin(''); setEmailErr(serverError); return; }
+    setPinErr(true); setPin('');
+    document.querySelector('.pin-dots')?.classList.remove('shake');
+    requestAnimationFrame(() => document.querySelector('.pin-dots')?.classList.add('shake'));
   }, [selectedUser, doLogin]);
 
   const submitSignup = useCallback(async (e) => {
