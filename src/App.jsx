@@ -57,6 +57,7 @@ const USERS = [
   { email: 'sbuchanan@pureturfllc.com', name: 'Sean Buchanan',  role: 'executive', initials: 'SB', title: 'Director of Operations', pin: '1234' },
   { email: 'kdryden@pureturfllc.com', name: 'Kurt Dryden',      role: 'executive', initials: 'KD', title: 'VP of Finance',          pin: '1234' },
   { email: 'rbone@pureturfllc.com',   name: 'Ronnie Bone',      role: 'executive', initials: 'RB', title: 'COO',                    pin: '1234' },
+  { email: 'dturner@pureturfllc.com', name: 'Dave Turner',      role: 'executive', initials: 'DT', title: 'Executive',              pin: '1234' },
   { email: 'kaley@pureturfllc.com',   name: 'Kaley Brownlee',   role: 'sales',     initials: 'KB', title: 'Sales',                  pin: '1234' },
   { email: 'chris@pureturfllc.com',   name: 'Chris Kleeman',    role: 'sales',     initials: 'CK', title: 'Sales',                  pin: '1234' },
   { email: 'daniel@pureturfllc.com',  name: 'Daniel Anderson',  role: 'sales',     initials: 'DA', title: 'Sales',                  pin: '1234' },
