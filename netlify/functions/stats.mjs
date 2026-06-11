@@ -194,7 +194,7 @@ async function fetchHubSpotDeals(date_from) {
 // In-memory result cache. Netlify reuses warm function instances, so this persists
 // across requests and makes repeat dashboard loads instant instead of ~10s.
 const STATS_CACHE = new Map(); // rangeKey -> { at: epochMs, body: string }
-const CACHE_TTL_MS = 180000;   // 3 minutes
+const CACHE_TTL_MS = 300000;   // 5 minutes (kept warm by keep-warm.mjs every 4 min)
 
 export const handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
