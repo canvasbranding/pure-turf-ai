@@ -1842,7 +1842,7 @@ function AppInner() {
       {screen === 'login' && (
         <div className="login-screen" ref={loginRef}>
           <div className="login-photo">
-            <img src="/lawn-dusk.jpg" className="login-photo-img" alt="" aria-hidden="true" onError={e => e.target.style.display='none'}/>
+            <img src={theme === 'light' ? '/essential-house2.jpg' : '/lawn-dusk.jpg'} className="login-photo-img" alt="" aria-hidden="true" onError={e => e.target.style.display='none'}/>
             <div className="login-photo-bg"/>
             <div className="login-photo-content">
               <div className="login-photo-logo"><PTLockup width={180} color="white"/></div>
