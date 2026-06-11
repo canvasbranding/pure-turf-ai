@@ -1709,13 +1709,30 @@ function AppInner() {
     setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: text }, { id: loadId, role: 'loading' }]);
     setInput(''); setBusy(true);
     const newHist = [...history, { role: 'user', content: text }];
+    const aiId = Date.now() + 2;
     try {
       const res = await fetch('/.netlify/functions/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: newHist, dateRange, userEmail: currentUser?.email, userName: currentUser?.name, userRole: currentUser?.role, liveStats }) });
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
-      const data = await res.json();
-      const reply = data.reply || 'No response.';
+      if (!res.ok || !res.body) throw new Error(`Server error: ${res.status}`);
+      // Stream tokens in as they arrive — keep the loading bubble until the first token.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = '', started = false;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        if (!started) {
+          started = true;
+          setMessages(prev => prev.filter(m => m.id !== loadId).concat({ id: aiId, role: 'ai', content: acc }));
+        } else {
+          setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: acc } : m));
+        }
+      }
+      const reply = acc.trim() || 'No response.';
+      setMessages(prev => started
+        ? prev.map(m => m.id === aiId ? { ...m, content: reply } : m)
+        : prev.filter(m => m.id !== loadId).concat({ id: aiId, role: 'ai', content: reply }));
       setHistory([...newHist, { role: 'assistant', content: reply }]);
-      setMessages(prev => prev.filter(m => m.id !== loadId).concat({ id: Date.now(), role: 'ai', content: reply }));
       if (isMobile && mobileTab !== 'chat') setHasUnreadChat(true);
     } catch (err) {
       setMessages(prev => prev.filter(m => m.id !== loadId).concat({ id: Date.now(), role: 'error', content: `Error: ${err.message}` }));
@@ -1723,19 +1740,24 @@ function AppInner() {
   }, [busy, history, isMobile, mobileTab, liveStats, dateRange, currentUser]);
 
   // ── MESSAGE ANIMATION ──────────────────────────────────────────────────
+  const lastAnimatedId = useRef(null);
   useEffect(() => {
     if (!messages.length) return;
     const last = messages[messages.length - 1];
-    if (last.role === 'loading') return;
-    const els = msgsRef.current?.querySelectorAll('.msg-row');
-    if (els?.length) {
-      const el = els[els.length - 1];
-      el.style.opacity = '0'; el.style.transform = 'translateY(10px)';
-      requestAnimationFrame(() => {
-        el.style.transition = 'opacity 0.35s ease, transform 0.35s ease';
-        el.style.opacity = '1'; el.style.transform = 'translateY(0)';
-      });
+    // Animate each bubble in only once (by id) — not on every streamed token.
+    if (last.role !== 'loading' && last.id !== lastAnimatedId.current) {
+      lastAnimatedId.current = last.id;
+      const els = msgsRef.current?.querySelectorAll('.msg-row');
+      if (els?.length) {
+        const el = els[els.length - 1];
+        el.style.opacity = '0'; el.style.transform = 'translateY(10px)';
+        requestAnimationFrame(() => {
+          el.style.transition = 'opacity 0.35s ease, transform 0.35s ease';
+          el.style.opacity = '1'; el.style.transform = 'translateY(0)';
+        });
+      }
     }
+    // Keep following the text as it streams in.
     if (msgsRef.current) msgsRef.current.scrollTo({ top: msgsRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 

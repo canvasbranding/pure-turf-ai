@@ -287,56 +287,70 @@ Company context:
 - Reps: Kaley Brownlee, Chris Kleeman, Daniel Anderson (sales); Wyatt Raines (commercial); Kurt Dryden (sales manager). Owner: David Patton.`;
 }
 
-// ── HANDLER ───────────────────────────────────────────────────────────────
-export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' }, body: '' };
-  }
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method not allowed' };
-  }
+// ── HANDLER (streaming) ───────────────────────────────────────────────────
+// Functions 2.0 streaming handler: tokens are sent to the browser as the model
+// writes them, so the answer appears progressively instead of after a long wait.
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
 
-  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
+export default async (req) => {
+  if (req.method === 'OPTIONS') return new Response('', { status: 200, headers: CORS });
+  if (req.method !== 'POST')    return new Response('Method not allowed', { status: 405, headers: CORS });
 
-  try {
-    const { messages, dateRange, userEmail, userName, userRole, liveStats } = JSON.parse(event.body || '{}');
-    if (!messages?.length) return { statusCode: 400, headers, body: JSON.stringify({ error: 'messages required' }) };
+  let payload;
+  try { payload = await req.json(); }
+  catch { return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } }); }
 
-    // Log the user's latest message (fire-and-forget)
-    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-    if (lastUserMsg) logQuery(userEmail, userName, lastUserMsg.content);
+  const { messages, dateRange, userEmail, userName, userRole, liveStats } = payload;
+  if (!messages?.length) return new Response(JSON.stringify({ error: 'messages required' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-    let currentMessages = messages;
-    let response;
-    let iterations = 0;
-    const startTime = Date.now();
-    const TIME_BUDGET = 22000; // 22s budget out of 26s timeout
+  // Log the user's latest message (fire-and-forget)
+  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+  if (lastUserMsg) logQuery(userEmail, userName, lastUserMsg.content);
 
-    while (iterations < 4) {
-      iterations++;
-      if (Date.now() - startTime > TIME_BUDGET) break; // bail before timeout
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (t) => { try { controller.enqueue(encoder.encode(t)); } catch {} };
+      try {
+        let currentMessages = messages;
+        let iterations = 0;
+        const startTime = Date.now();
+        const TIME_BUDGET = 22000; // 22s budget out of 26s timeout
+        let producedText = false;
 
-      response = await client.messages.create({
-        model: 'claude-sonnet-4-6', max_tokens: 4096,
-        system: getSystemPrompt(userName, userRole, liveStats, dateRange), tools, messages: currentMessages,
-      });
-      if (response.stop_reason !== 'tool_use') break;
+        while (iterations < 4) {
+          iterations++;
+          if (Date.now() - startTime > TIME_BUDGET) break;
 
-      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
-      // Run tool calls in PARALLEL (biggest speed win)
-      const toolResults = await Promise.all(toolUseBlocks.map(async (block) => {
-        console.log(`[TOOL] ${block.name}: ${JSON.stringify(block.input).slice(0, 300)}`);
-        const result = await executeTool(block.name, block.input, dateRange);
-        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) };
-      }));
-      currentMessages = [...currentMessages, { role: 'assistant', content: response.content }, { role: 'user', content: toolResults }];
-    }
+          const ms = client.messages.stream({
+            model: 'claude-sonnet-4-6', max_tokens: 4096,
+            system: getSystemPrompt(userName, userRole, liveStats, dateRange), tools, messages: currentMessages,
+          });
+          // Forward text tokens to the browser as they arrive
+          ms.on('text', (delta) => { producedText = true; send(delta); });
+          const final = await ms.finalMessage();
 
-    const reply = response?.content?.find(b => b.type === 'text')?.text || 'No response generated.';
-    return { statusCode: 200, headers, body: JSON.stringify({ reply }) };
+          if (final.stop_reason !== 'tool_use') break;
 
-  } catch (err) {
-    console.error('Chat error:', err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
-  }
+          // Run tool calls in parallel, then continue the loop
+          const toolUseBlocks = final.content.filter(b => b.type === 'tool_use');
+          const toolResults = await Promise.all(toolUseBlocks.map(async (block) => {
+            console.log(`[TOOL] ${block.name}: ${JSON.stringify(block.input).slice(0, 300)}`);
+            const result = await executeTool(block.name, block.input, dateRange);
+            return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) };
+          }));
+          currentMessages = [...currentMessages, { role: 'assistant', content: final.content }, { role: 'user', content: toolResults }];
+        }
+
+        if (!producedText) send('No response generated.');
+        controller.close();
+      } catch (err) {
+        console.error('Chat error:', err);
+        send(`\n\n_Something went wrong: ${err.message}_`);
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, { status: 200, headers: { ...CORS, 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' } });
 };
