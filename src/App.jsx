@@ -1710,7 +1710,7 @@ function AppInner() {
     setInput(''); setBusy(true);
     const newHist = [...history, { role: 'user', content: text }];
     try {
-      const res = await fetch('/.netlify/functions/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: newHist, dateRange, userEmail: currentUser?.email, userName: currentUser?.name }) });
+      const res = await fetch('/.netlify/functions/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: newHist, dateRange, userEmail: currentUser?.email, userName: currentUser?.name, userRole: currentUser?.role, liveStats }) });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data = await res.json();
       const reply = data.reply || 'No response.';
@@ -1720,7 +1720,7 @@ function AppInner() {
     } catch (err) {
       setMessages(prev => prev.filter(m => m.id !== loadId).concat({ id: Date.now(), role: 'error', content: `Error: ${err.message}` }));
     } finally { setBusy(false); }
-  }, [busy, history, isMobile, mobileTab]);
+  }, [busy, history, isMobile, mobileTab, liveStats, dateRange, currentUser]);
 
   // ── MESSAGE ANIMATION ──────────────────────────────────────────────────
   useEffect(() => {
