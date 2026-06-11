@@ -336,7 +336,19 @@ export const handler = async (event) => {
     stats.errors.rgServices = rgResult.reason?.message;
   }
 
-  return { statusCode: 200, headers, body: JSON.stringify(stats) };
+  // CDN caching: HubSpot/Windsor queries take ~10s, so serve the computed result
+  // from Netlify's edge instead of re-querying on every page load. Only one request
+  // every few minutes hits the slow APIs; everyone else gets an instant response.
+  // stale-while-revalidate means the refresh happens in the background — users never wait.
+  // Don't cache a response that had a fetch error (would pin broken data for minutes).
+  const hasErrors = Object.keys(stats.errors).length > 0;
+  const cacheHeaders = hasErrors
+    ? { 'Cache-Control': 'no-store' }
+    : {
+        'Cache-Control': 'public, max-age=0, must-revalidate',
+        'Netlify-CDN-Cache-Control': 'public, s-maxage=180, stale-while-revalidate=600',
+      };
+  return { statusCode: 200, headers: { ...headers, ...cacheHeaders }, body: JSON.stringify(stats) };
 };
 
 // Appended: RG Services KPI fetch
