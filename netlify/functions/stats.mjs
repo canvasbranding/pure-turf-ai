@@ -191,12 +191,23 @@ async function fetchHubSpotDeals(date_from) {
   return { total: deals.length, totalAll: allDeals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals };
 }
 
+// In-memory result cache. Netlify reuses warm function instances, so this persists
+// across requests and makes repeat dashboard loads instant instead of ~10s.
+const STATS_CACHE = new Map(); // rangeKey -> { at: epochMs, body: string }
+const CACHE_TTL_MS = 180000;   // 3 minutes
+
 export const handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
   const rangeKey = event.queryStringParameters?.range || 'mtd';
   const { date_from, date_to } = getDateRange(rangeKey);
+
+  // Fast path: serve a recent cached result if we have one.
+  const cached = STATS_CACHE.get(rangeKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return { statusCode: 200, headers: { ...headers, 'Cache-Control': 'public, max-age=0, must-revalidate', 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=180, stale-while-revalidate=600' }, body: cached.body };
+  }
 
   const [googleResult, metaResult, gbpResult, hubspotResult, rgResult] = await Promise.allSettled([
     fetchWindsor('google_ads', date_from, date_to),
@@ -342,13 +353,16 @@ export const handler = async (event) => {
   // stale-while-revalidate means the refresh happens in the background — users never wait.
   // Don't cache a response that had a fetch error (would pin broken data for minutes).
   const hasErrors = Object.keys(stats.errors).length > 0;
+  const body = JSON.stringify(stats);
+  // Only cache a clean response — never pin a partial/errored result.
+  if (!hasErrors) STATS_CACHE.set(rangeKey, { at: Date.now(), body });
   const cacheHeaders = hasErrors
     ? { 'Cache-Control': 'no-store' }
     : {
         'Cache-Control': 'public, max-age=0, must-revalidate',
-        'Netlify-CDN-Cache-Control': 'public, s-maxage=180, stale-while-revalidate=600',
+        'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=180, stale-while-revalidate=600',
       };
-  return { statusCode: 200, headers: { ...headers, ...cacheHeaders }, body: JSON.stringify(stats) };
+  return { statusCode: 200, headers: { ...headers, ...cacheHeaders }, body };
 };
 
 // Appended: RG Services KPI fetch
