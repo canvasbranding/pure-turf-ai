@@ -238,10 +238,18 @@ function getPerms(email, role, overrides) {
 }
 
 const ALL_TILES = [
-  { key:'google',   lbl:'Google Ads',  val:4821, prefix:'$', sub:'↑ 108 conv · $89 CPA',  dir:'up', perm:'googleAds' },
-  { key:'meta',     lbl:'Meta Ads',    val:1205, prefix:'$', sub:'↓ $484 CPA',             dir:'dn', perm:'metaAds'  },
-  { key:'gbp',      lbl:'GBP Views',   val:2841, prefix:'',  sub:'↑ 47 calls this week',  dir:'up', perm:'gbp'      },
-  { key:'pipeline', lbl:'Pipeline',    val:1617, prefix:'',  sub:'deals · 2026',           dir:'',   perm:'pipeline' },
+  { key:'google',    lbl:'Google Ads',   val:4821, prefix:'$', sub:'↑ 108 conv · $89 CPA',  dir:'up', perm:'googleAds', group:'Marketing' },
+  { key:'meta',      lbl:'Meta Ads',     val:1205, prefix:'$', sub:'↓ $484 CPA',             dir:'dn', perm:'metaAds',   group:'Marketing' },
+  { key:'gbp',       lbl:'GBP Views',    val:2841, prefix:'',  sub:'↑ 47 calls this week',  dir:'up', perm:'gbp',       group:'Marketing' },
+  { key:'pipeline',  lbl:'Pipeline',     val:1617, prefix:'',  sub:'deals · 2026',           dir:'',   perm:'pipeline',  group:'Sales' },
+  // Business-outcome tiles — the funnel from leads → closes → customers → revenue.
+  { key:'leads',      lbl:'New Leads',      val:0, prefix:'',  sub:'new this period',   dir:'up', perm:'pipeline', group:'Sales' },
+  { key:'closeRate',  lbl:'Close Rate',     val:0, prefix:'',  suffix:'%', sub:'won vs lost', dir:'', perm:'pipeline', group:'Sales' },
+  { key:'revenue',    lbl:'Revenue',        val:0, prefix:'$', sub:'closed won',        dir:'up', perm:'pipeline', group:'Sales' },
+  { key:'newCustomers',lbl:'New Customers', val:0, prefix:'',  sub:'added this period', dir:'up', perm:'pipeline', group:'Customers' },
+  { key:'activeCustomers',lbl:'Active Customers', val:0, prefix:'', sub:'total book',   dir:'',   perm:'pipeline', group:'Customers' },
+  { key:'cancellations',lbl:'Cancellations',val:0, prefix:'', sub:'this period',        dir:'dn', perm:'pipeline', group:'Customers' },
+  { key:'adSpend',    lbl:'Total Ad Spend', val:0, prefix:'$', sub:'Google + Meta',     dir:'',   perm:'googleAds', group:'Marketing' },
 ];
 const ALL_ACTIONS = [
   { icon:'briefing', label:'Monday Briefing', sub:'Weekly performance overview',   perm:'mondayBrief', prompt:'Give me my Monday morning marketing briefing — Google Ads, Meta, and GBP performance overview.' },
@@ -1602,29 +1610,37 @@ function AppInner() {
       }
     }).catch(() => {}); // fall back to localStorage
   }, [currentUser]);
-  // Merge live Windsor/HubSpot data into tiles
+  // Merge live Windsor/HubSpot data into tiles.
   const getLiveTile = (tile) => {
     if (!liveStats) return tile;
-    const s = liveStats[tile.key];
-    if (!s) return tile;
-    let val;
-    if (tile.key === 'google')   val = s.spend;
-    else if (tile.key === 'meta')     val = s.spend;
-    else if (tile.key === 'gbp')      val = s.views;
-    else if (tile.key === 'pipeline') val = s.total;
-    else val = tile.val;
+    const h = liveStats.hubspot, rg = liveStats.rgServices;
+    let val, sub, dir;
+    switch (tile.key) {
+      case 'google':   { const s = liveStats.google;   if (s) { val = s.spend; sub = s.sub; dir = s.dir; } break; }
+      case 'meta':     { const s = liveStats.meta;      if (s) { val = s.spend; sub = s.sub; dir = s.dir; } break; }
+      case 'gbp':      { const s = liveStats.gbp;       if (s) { val = s.views; sub = s.sub; dir = s.dir; } break; }
+      case 'pipeline': { const s = liveStats.pipeline;  if (s) { val = s.total; sub = s.sub; dir = s.dir; } break; }
+      case 'adSpend':  { const s = liveStats.adSpend;   if (s) { val = s.total; sub = `Google $${(s.google||0).toLocaleString()} · Meta $${(s.meta||0).toLocaleString()}`; } break; }
+      case 'leads':       if (h) { val = h.newLeads; sub = 'new this period'; } break;
+      case 'closeRate':   if (h && h.closeRate != null) { val = h.closeRate; sub = `${h.wonCount||0} won · ${h.lostCount||0} lost`; } break;
+      case 'revenue':     if (h) { val = h.revenue; sub = 'closed won'; } break;
+      case 'newCustomers':    if (rg) { val = rg.newCustomers; sub = 'added this period'; } break;
+      case 'activeCustomers': if (rg) { val = rg.totalActive; sub = 'total active book'; } break;
+      case 'cancellations':   if (rg) { val = rg.newCancels; sub = 'cancelled this period'; } break;
+      default: val = tile.val;
+    }
     return {
       ...tile,
       val:  (val !== undefined && val !== null) ? val : tile.val,
-      sub:  s.sub || tile.sub,
-      dir:  s.dir !== undefined ? s.dir : tile.dir,
+      sub:  sub || tile.sub,
+      dir:  dir !== undefined ? dir : tile.dir,
     };
   };
 
   // Get goal progress for a tile key
   const getTileGoalContext = (key) => {
     if (!liveStats) return null;
-    const tileToGoal = { google: 'googleCPA', meta: null, gbp: null, pipeline: 'leads' };
+    const tileToGoal = { google: 'googleCPA', adSpend: 'adSpend', leads: 'leads', closeRate: 'closeRate' };
     const goalId = tileToGoal[key];
     if (!goalId) return null;
     const goal = GOAL_DEFS.find(g => g.id === goalId);
@@ -1836,12 +1852,13 @@ function AppInner() {
       const target = parseInt(el.dataset.count);
       if (!target) return;
       const prefix = el.dataset.prefix || '';
+      const suffix = el.dataset.suffix || '';
       const start = performance.now();
       const duration = 1400;
       const step = (now) => {
         const t = Math.min((now - start) / duration, 1);
         const ease = 1 - Math.pow(1 - t, 3); // cubic ease-out
-        el.textContent = prefix + Math.round(target * ease).toLocaleString();
+        el.textContent = prefix + Math.round(target * ease).toLocaleString() + suffix;
         if (t < 1) requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
@@ -2264,45 +2281,45 @@ function AppInner() {
                 <div className="dash-col" style={{display: mainView === 'dashboard' ? undefined : 'none'}}>
                 <div className="dash-scroll" key={dateRange}>
 
-                  {/* Metric cards */}
-                  {visibleTiles.length > 0 && (
+                  {/* Metric cards — grouped: Marketing · Sales · Customers */}
+                  {visibleTiles.length > 0 && (() => {
+                    const ERR_SRC = { google:'google', meta:'meta', gbp:'gbp', pipeline:'hubspot', leads:'hubspot', closeRate:'hubspot', revenue:'hubspot', newCustomers:'rgServices', activeCustomers:'rgServices', cancellations:'rgServices' };
+                    const tileErrored = (k) => !!liveStats?.errors?.[ERR_SRC[k]];
+                    const ORDER = ['Marketing','Sales','Customers'];
+                    const groups = ORDER.map(g => ({ g, tiles: visibleTiles.filter(t => (t.group||'Other') === g) })).filter(x => x.tiles.length);
+                    const other = visibleTiles.filter(t => !ORDER.includes(t.group));
+                    if (other.length) groups.push({ g:'Other', tiles: other });
+                    return (
                     <div className="metrics-section">
-                      {/* Hero card */}
-                      <div className={`metric-card metric-hero${statsLoading?' loading':''}`} onClick={()=>sendMessage(`Give me a detailed breakdown of ${visibleTiles[0].lbl} for ${rangeDesc} — what stands out and what needs attention?`)}>
-                        <div className="mc-glow"/>
-                        <div className="mc-label">{visibleTiles[0].lbl} · {DATE_RANGES[dateRange]?.label}</div>
-                        {statsLoading
-                          ? <div className="mc-value-skeleton"/>
-                          : <div className="mc-value" data-count={visibleTiles[0].val} data-prefix={visibleTiles[0].prefix}>{visibleTiles[0].prefix}{liveStats ? visibleTiles[0].val.toLocaleString() : '0'}</div>
-                        }
-                        <div className={`mc-sub${visibleTiles[0].dir?' '+visibleTiles[0].dir:''}`}>{statsLoading ? '–' : visibleTiles[0].sub}</div>
-                        {getTileGoalContext(visibleTiles[0].key) && (
-                          <div className={`mc-goal-ctx mc-goal-${getTileGoalContext(visibleTiles[0].key).status}`}>{getTileGoalContext(visibleTiles[0].key).pct}% of {getTileGoalContext(visibleTiles[0].key).label} target</div>
-                        )}
-                        <div className="mc-footer">
-                          <span>{statsLoading ? 'Loading…' : liveStats?.[visibleTiles[0].key] ? 'Live data · click for breakdown' : liveStats?.errors?.[visibleTiles[0].key] ? `⚠ ${SOURCE_LABELS[visibleTiles[0].key] || 'Data'} unavailable` : 'Click for live breakdown'}</span>
-                          <div className="mc-arrow"><Icon name="arrowR" size={12}/></div>
+                      {groups.map(({ g, tiles }) => (
+                        <div key={g} className="metric-group">
+                          <div className="metric-group-label">{g} · {DATE_RANGES[dateRange]?.label}</div>
+                          <div className="metric-grid">
+                            {tiles.map(t => {
+                              const errored = tileErrored(t.key);
+                              const gc = getTileGoalContext(t.key);
+                              return (
+                                <div key={t.key} className={`metric-card metric-sm${statsLoading?' loading':''}`} onClick={()=>sendMessage(`Break down ${t.lbl} for ${rangeDesc} — performance, trends, action items.`)}>
+                                  <div className="mc-label">{t.lbl}</div>
+                                  {statsLoading
+                                    ? <div className="mc-value-skeleton mc-value-skeleton-sm"/>
+                                    : errored
+                                      ? <div className="mc-value" style={{opacity:0.5}}>–</div>
+                                      : <div className="mc-value" data-count={t.val} data-prefix={t.prefix} data-suffix={t.suffix||''}>{t.prefix}{liveStats ? t.val.toLocaleString() : '0'}{t.suffix||''}</div>
+                                  }
+                                  <div className={`mc-sub${t.dir?' '+t.dir:''}`}>{errored ? '⚠ unavailable' : t.sub}</div>
+                                  {gc && !errored && (
+                                    <div className={`mc-goal-ctx mc-goal-${gc.status}`}>{gc.pct}% of target</div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                      {/* Supporting tiles */}
-                      {visibleTiles.length > 1 && (
-                        <div className="metric-grid">
-                          {visibleTiles.slice(1).map(t => (
-                            <div key={t.key} className={`metric-card metric-sm${statsLoading?' loading':''}`} onClick={()=>sendMessage(`Break down ${t.lbl} for ${rangeDesc} — performance, trends, action items.`)}>
-                              <div className="mc-label">{t.lbl}</div>
-                              {statsLoading
-                                ? <div className="mc-value-skeleton mc-value-skeleton-sm"/>
-                                : <div className="mc-value" data-count={t.val} data-prefix={t.prefix}>{t.prefix}{liveStats ? t.val.toLocaleString() : '0'}</div>
-                              }
-                              <div className={`mc-sub${t.dir?' '+t.dir:''}`}>{t.sub}</div>
-                              {getTileGoalContext(t.key) && (
-                                <div className={`mc-goal-ctx mc-goal-${getTileGoalContext(t.key).status}`}>{getTileGoalContext(t.key).pct}% of target</div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      ))}
                     </div>
+                    );
+                  })()}
                   )}
 
                   {/* Action rows */}
