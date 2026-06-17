@@ -2695,7 +2695,6 @@ function AppInner() {
                     </div>
                     );
                   })()}
-                  )}
 
                   {/* Action rows */}
                   <div style={{ height: 32 }}/>

@@ -46,6 +46,12 @@ export default async (req) => {
     sa(`${HOST.gbp}/api/gbp/v1/reviews/star-rating-count/`, 'application/json'),
   ]);
 
+  if (new URL(req.url).searchParams.get('probe') === 'kw') {
+    const a = await sa(`${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}${cc}${periods}&page_size=15&order_by=position`);
+    const b = await sa(`${HOST.gsc}/search-console/api/v2/keyword-rankings/?selected_property=${prop}${cc}${periods}&page_size=15`);
+    return new Response(JSON.stringify({ keywords_status: a.status, keywords_sample: JSON.stringify(a.body).slice(0, 900), kr_status: b.status, kr_sample: JSON.stringify(b.body).slice(0, 900) }), { status: 200, headers: { ...CORS, 'Cache-Control':'no-store' } });
+  }
+
   const out = { fetchedAt: new Date().toISOString(), errors: {} };
 
   // ── GSC website search traffic (United States) ──────────────
