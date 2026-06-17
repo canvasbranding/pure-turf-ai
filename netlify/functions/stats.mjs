@@ -189,14 +189,16 @@ export const handler = async (event) => {
   const { date_from, date_to } = getDateRange(rangeKey);
   const cdnHeaders = { 'Cache-Control': 'public, max-age=0, must-revalidate', 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=180, stale-while-revalidate=600' };
 
-  // Temporary probe: discover the Windsor QuickBooks datasource + fields.
+  // Temporary probe: Windsor QuickBooks (/quickbooks endpoint, report-prefixed fields).
   if (event.queryStringParameters?.probe === 'qb') {
-    const ds = event.queryStringParameters.ds || 'quickbooks';
-    const fields = event.queryStringParameters.fields || 'date,account,account_name,account_type,amount,transaction_type,category,name,total,balance';
-    const purl = `https://connectors.windsor.ai/all?api_key=${WINDSOR_KEY}&fields=${fields}&date_from=${date_from}&date_to=${date_to}&datasource=${ds}`;
-    const pr = await fetch(purl).catch(e => ({ ok:false, status:0, text: async () => e.message }));
+    const qp = event.queryStringParameters;
+    const fields = qp.fields || 'accounts__name,accounts__accounttype,accounts__accountsubtype,accounts__classification,accounts__currentbalance';
+    const sel = qp.sel || 'kurt@pureturfllc.com_184633936';
+    const dp = qp.dp || 'last_year';
+    const purl = `https://connectors.windsor.ai/quickbooks?api_key=${WINDSOR_KEY}&date_preset=${dp}&fields=${encodeURIComponent(fields)}&select_accounts=${encodeURIComponent(sel)}`;
+    const pr = await fetch(purl).catch(e => ({ status:0, text: async () => e.message }));
     const ptext = await pr.text();
-    return { statusCode: 200, headers: { ...headers, 'Cache-Control':'no-store' }, body: JSON.stringify({ ds, status: pr.status, sample: ptext.slice(0, 1800) }) };
+    return { statusCode: 200, headers: { ...headers, 'Cache-Control':'no-store' }, body: JSON.stringify({ status: pr.status, sample: ptext.slice(0, 2000) }) };
   }
 
   // Fast path: recent in-memory result on this warm instance. Steady-state speed comes
