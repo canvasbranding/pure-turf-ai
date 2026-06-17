@@ -751,16 +751,17 @@ function GBPView({ liveStats, statsLoading, dateRange, sendMessage }) {
 
 // ══ PIPELINE VIEW ══════════════════════════════════════════════════════════
 function PipelineView({ liveStats, statsLoading, dateRange, sendMessage }) {
-  const h = liveStats?.hubspot;
+  const [pipeView, setPipeView] = useState('sales'); // 'sales' | 'commercial'
+  const hasCommercial = !!liveStats?.hubspotCommercial;
+  const h = pipeView === 'commercial' ? liveStats?.hubspotCommercial : liveStats?.hubspot;
+  const pipeLabel = pipeView === 'commercial' ? 'Commercial' : 'Sales';
   const rangeLabel = DATE_RANGES[dateRange]?.label || 'Month to date';
   const fmt$ = v => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v}`;
 
-  const STAGE_ORDER = ['Ready to Contact','Attempting to Contact','Estimate Sent','Closed Won','Closed Lost'];
+  const STAGE_ORDER = ['ready to contact','attempting to contact','estimate sent','closed won','closed lost'];
+  const stageRank = s => { const i = STAGE_ORDER.indexOf((s || '').toLowerCase()); return i === -1 ? 99 : i; };
   const stages = h?.stageBreakdown
-    ? [...h.stageBreakdown].sort((a, b) => {
-        const ai = STAGE_ORDER.indexOf(a.stage), bi = STAGE_ORDER.indexOf(b.stage);
-        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-      })
+    ? [...h.stageBreakdown].sort((a, b) => stageRank(a.stage) - stageRank(b.stage))
     : [];
   const maxCount = stages.length > 0 ? Math.max(...stages.map(s => s.count), 1) : 1;
 
@@ -768,16 +769,26 @@ function PipelineView({ liveStats, statsLoading, dateRange, sendMessage }) {
     <div className="data-view-scroll">
       <div className="dv-header">
         <div>
-          <div className="dv-eyebrow">HubSpot CRM</div>
+          <div className="dv-eyebrow">HubSpot CRM · 2026 {pipeLabel}</div>
           <h2 className="dv-title">Pipeline</h2>
         </div>
         <div className="dv-period">{rangeLabel}</div>
       </div>
 
+      {hasCommercial && (
+        <div className="pipe-toggle">
+          {['sales','commercial'].map(p => (
+            <button key={p} className={`pipe-toggle-btn${pipeView === p ? ' active' : ''}`} onClick={() => setPipeView(p)}>
+              {p === 'sales' ? 'Residential' : 'Commercial'}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* KPIs */}
       <div className="dv-kpi-row">
         {[
-          { label:'Total Deals',   val: liveStats?.pipeline?.total ?? '–',  sub: 'in CRM' },
+          { label:'Total Deals',   val: h?.total ?? '–',  sub: 'in CRM' },
           { label:'New Leads',     val: (h?.newLeads > 0 ? h.newLeads : h?.activeLeads) ?? '–', sub: h?.newLeads > 0 ? 'new this period' : 'active in pipeline' },
           { label:'Close Rate',    val: h?.closeRate != null ? `${h.closeRate}%` : '–', sub: `${h?.wonCount ?? 0}W / ${h?.lostCount ?? 0}L closed` },
           { label:'Revenue',       val: h?.revenue ? fmt$(h.revenue) : '–', sub: 'closed won' },

@@ -1,6 +1,6 @@
 // Pure Turf AI — Dashboard Stats + Goals Data Function
 import {
-  PIPELINE_2026_SALES, DEAL_STAGE_NAMES, DEAL_STAGES_WON, DEAL_STAGES_LOST, EARLY_STAGES,
+  PIPELINE_2026_SALES, PIPELINE_2026_COMMERCIAL, ACTIVE_PIPELINES, DEAL_STAGE_NAMES, DEAL_STAGES_WON, DEAL_STAGES_LOST,
   OWNER_NAMES, CLOSE_RATE_EXCLUDED, REP_NOTES, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, fetchDealsInPipelines, leadSourceOf,
 } from './_shared/crm.mjs';
 
@@ -20,26 +20,37 @@ async function fetchWindsor(datasource, from, to) {
 async function fetchHubSpotDeals(date_from) {
   const props = 'dealname,amount,dealstage,pipeline,closedate,createdate,hubspot_owner_id,true_lead_source,hs_analytics_source';
 
-  // Fetch pipeline stage definitions in parallel
-  const stageMapPromise = fetch(`https://api.hubapi.com/crm/v3/pipelines/deals/${PIPELINE_2026_SALES}`, {
+  // Fetch ALL pipelines' stage definitions once — covers both 2026 Sales and Commercial,
+  // which have different stage ids. Flatten into one id→label map.
+  const stageMapPromise = fetch(`https://api.hubapi.com/crm/v3/pipelines/deals`, {
     headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` },
     signal: AbortSignal.timeout(5000),
   }).then(async r => {
     if (!r.ok) return {};
     const data = await r.json();
     const map = {};
-    (data.stages || []).forEach(s => { map[s.id] = s.label; });
+    (data.results || []).forEach(p => (p.stages || []).forEach(s => { map[s.id] = s.label; }));
     return map;
   }).catch(() => ({}));
 
-  // Fetch the COMPLETE 2026 Sales pipeline (no truncation).
-  const { rows: deals, total: totalDeals } = await fetchDealsInPipelines(HUBSPOT_TOKEN, PIPELINE_2026_SALES, props);
-  console.log(`[DEALS] Fetched ${totalDeals} deals in 2026 Sales pipeline`);
+  // Fetch BOTH 2026 pipelines in one pass (no truncation), then split.
+  const { rows: allRows } = await fetchDealsInPipelines(HUBSPOT_TOKEN, ACTIVE_PIPELINES, props);
   const stageMap = await stageMapPromise;
-  console.log(`[DEALS] Stage map:`, JSON.stringify(stageMap));
   const getStageName = (id) => stageMap[id] || DEAL_STAGE_NAMES[id] || id || 'Unknown';
 
-  // Identify won/lost by checking stage labels
+  const salesDeals = allRows.filter(d => d.properties.pipeline === PIPELINE_2026_SALES);
+  const commDeals  = allRows.filter(d => d.properties.pipeline === PIPELINE_2026_COMMERCIAL);
+  console.log(`[DEALS] Fetched ${salesDeals.length} Sales + ${commDeals.length} Commercial deals`);
+
+  return {
+    sales:      computeDealMetrics(salesDeals, date_from, getStageName),
+    commercial: computeDealMetrics(commDeals, date_from, getStageName),
+  };
+}
+
+// Compute the full metric set for one pipeline's deals. Used for both 2026 pipelines.
+function computeDealMetrics(deals, date_from, getStageName) {
+  // Identify won/lost by checking stage labels (robust across pipelines with different ids)
   const isWon  = (d) => {
     const name = getStageName(d.properties.dealstage).toLowerCase();
     return name.includes('closed won') || name.includes('closedwon') || DEAL_STAGES_WON.includes(d.properties.dealstage);
@@ -50,11 +61,11 @@ async function fetchHubSpotDeals(date_from) {
   };
 
   const newLeads    = deals.filter(d => d.properties.createdate >= date_from).length;
-  // Active leads = deals in early stages (not yet won/lost) — useful when newLeads is 0 at start of period
-  const activeLeads = deals.filter(d => EARLY_STAGES.has(d.properties.dealstage)).length;
   const wonDeals    = deals.filter(isWon);
   const lostDeals   = deals.filter(isLost);
   const openDeals   = deals.filter(d => !isWon(d) && !isLost(d));
+  // Active leads = still-open deals — useful as a fallback when newLeads is 0 early in a period
+  const activeLeads = openDeals.length;
 
   // Period-filtered metrics
   const wonInRange    = wonDeals.filter(d => d.properties.closedate >= date_from);
@@ -156,7 +167,7 @@ async function fetchHubSpotDeals(date_from) {
   const taggedLeads = manualTagged;             // leads a rep hand-tagged
   const attributedLeads = attributed;           // leads with ANY source (manual or auto)
 
-  return { total: totalDeals, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads, attributedLeads };
+  return { total: deals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads, attributedLeads };
 }
 
 // In-memory result cache. Netlify reuses warm function instances, so this persists
@@ -308,9 +319,13 @@ export const handler = async (event) => {
 
   // ── HubSpot ─────────────────────────────────────────────
   if (hubspotResult.status === 'fulfilled') {
-    const h = hubspotResult.value;
-    stats.pipeline = { total: h.total, sub: `deals · ${new Date().getFullYear()}`, dir: '' };
-    stats.hubspot  = { newLeads: h.newLeads, revenue: h.revenue, closeRate: h.closeRate, wonCount: h.wonCount, lostCount: h.lostCount, stageBreakdown: h.stageBreakdown, repLeaderboard: h.repLeaderboard, recentDeals: h.recentDeals, leadSources: h.leadSources, taggedLeads: h.taggedLeads, attributedLeads: h.attributedLeads };
+    const { sales: s, commercial: c } = hubspotResult.value;
+    const year = new Date().getFullYear();
+    // Primary tile + dashboard = 2026 Sales (residential). Commercial is exposed
+    // alongside so the Pipeline view can toggle to it.
+    stats.pipeline = { total: s.total, sub: `deals · ${year}`, dir: '' };
+    stats.hubspot  = { total: s.total, newLeads: s.newLeads, activeLeads: s.activeLeads, revenue: s.revenue, closeRate: s.closeRate, wonCount: s.wonCount, lostCount: s.lostCount, stageBreakdown: s.stageBreakdown, repLeaderboard: s.repLeaderboard, recentDeals: s.recentDeals, leadSources: s.leadSources, taggedLeads: s.taggedLeads, attributedLeads: s.attributedLeads };
+    stats.hubspotCommercial = { total: c.total, newLeads: c.newLeads, activeLeads: c.activeLeads, revenue: c.revenue, closeRate: c.closeRate, wonCount: c.wonCount, lostCount: c.lostCount, stageBreakdown: c.stageBreakdown, repLeaderboard: c.repLeaderboard, recentDeals: c.recentDeals, leadSources: c.leadSources, taggedLeads: c.taggedLeads, attributedLeads: c.attributedLeads };
   } else { stats.errors.hubspot = hubspotResult.reason?.message; }
 
   const googleSpend = stats.google?.spend || 0;

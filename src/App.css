@@ -968,6 +968,12 @@ html[data-theme="dark"] .dv-kpi-card { background:rgba(255,255,255,0.04); }
 .dv-section-note { float:right; letter-spacing:0; text-transform:none; color:var(--text-3); font-weight:500; opacity:0.8; }
 .rep-tag { display:inline-block; margin-left:7px; padding:1px 6px; border-radius:5px; font-size:9px; font-weight:600; letter-spacing:0.03em; text-transform:uppercase; vertical-align:middle; color:var(--text-3); background:rgba(127,127,127,0.16); }
 
+/* Residential / Commercial pipeline toggle */
+.pipe-toggle { display:inline-flex; gap:2px; padding:3px; margin:0 0 14px; border-radius:9px; background:var(--surface-2, rgba(127,127,127,0.1)); }
+.pipe-toggle-btn { border:none; background:transparent; color:var(--text-3); font-size:12px; font-weight:600; padding:5px 14px; border-radius:6px; cursor:pointer; transition:background 0.15s, color 0.15s; }
+.pipe-toggle-btn:hover { color:var(--text-1); }
+.pipe-toggle-btn.active { background:var(--accent, #5E6AD2); color:#fff; }
+
 /* Data-health strip — surfaces failed/stale data sources */
 .data-health { font-size:11px; line-height:1.4; padding:7px 12px; border-radius:9px; margin:0 0 10px; display:flex; align-items:center; gap:7px; }
 .data-health-ok { color:var(--text-3); background:transparent; padding:2px 2px 8px; font-weight:500; }
