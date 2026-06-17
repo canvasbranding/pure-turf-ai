@@ -2514,23 +2514,28 @@ function AppInner() {
                       {groups.map(({ g, tiles }) => (
                         <div key={g} className="metric-group">
                           <div className="metric-group-label">{g} · {DATE_RANGES[dateRange]?.label}</div>
-                          <div className="metric-grid">
+                          <div className="metric-stack">
                             {tiles.map(t => {
                               const errored = tileErrored(t.key);
                               const gc = getTileGoalContext(t.key);
                               return (
-                                <div key={t.key} className={`metric-card metric-sm${statsLoading?' loading':''}`} onClick={()=>sendMessage(`Break down ${t.lbl} for ${rangeDesc} — performance, trends, action items.`)}>
+                                <div key={t.key} className={`metric-card metric-hero${statsLoading?' loading':''}`} onClick={()=>sendMessage(`Break down ${t.lbl} for ${rangeDesc} — performance, trends, action items.`)}>
+                                  <div className="mc-glow"/>
                                   <div className="mc-label">{t.lbl}</div>
                                   {statsLoading
-                                    ? <div className="mc-value-skeleton mc-value-skeleton-sm"/>
+                                    ? <div className="mc-value-skeleton"/>
                                     : errored
                                       ? <div className="mc-value" style={{opacity:0.5}}>–</div>
                                       : <div className="mc-value" data-count={t.val} data-prefix={t.prefix} data-suffix={t.suffix||''}>{t.prefix}{liveStats ? t.val.toLocaleString() : '0'}{t.suffix||''}</div>
                                   }
                                   <div className={`mc-sub${t.dir?' '+t.dir:''}`}>{errored ? '⚠ unavailable' : t.sub}</div>
                                   {gc && !errored && (
-                                    <div className={`mc-goal-ctx mc-goal-${gc.status}`}>{gc.pct}% of target</div>
+                                    <div className={`mc-goal-ctx mc-goal-${gc.status}`}>{gc.pct}% of {gc.label} target</div>
                                   )}
+                                  <div className="mc-footer">
+                                    <span>{statsLoading ? 'Loading…' : errored ? '⚠ data unavailable' : 'Live data · click for breakdown'}</span>
+                                    <div className="mc-arrow"><Icon name="arrowR" size={12}/></div>
+                                  </div>
                                 </div>
                               );
                             })}

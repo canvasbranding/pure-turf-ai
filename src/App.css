@@ -317,6 +317,8 @@ html[data-theme="dark"] .snav-btn.active {
 /* METRIC CARDS */
 .metrics-section { margin-bottom:20px; }
 .metric-group { margin-bottom:18px; }
+.metric-stack { display:flex; flex-direction:column; gap:10px; }
+.metric-stack .metric-hero { margin-bottom:0; }
 .metric-group-label { font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:700; margin:0 2px 8px; }
 
 /* Scorecard */
