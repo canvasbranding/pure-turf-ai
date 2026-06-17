@@ -360,14 +360,15 @@ async function fetchRGServices(hubspotToken, date_from) {
   const STATUS_CANCEL_PENDING = '6';
   const STATUS_ACTIVE        = '9';
 
-  const props = 'program_status,program_code,cancel_reason,createdate,hs_lastmodifieddate,sold_date';
+  const props = 'program_status,program_code,cancel_reason,createdate,hs_lastmodifieddate,sold_date,sold_by_1';
   let allServices = [];
   let after = undefined;
 
   // Fetch property label mappings in parallel
-  const [programCodeMap, cancelReasonMap] = await Promise.all([
+  const [programCodeMap, cancelReasonMap, soldByMap] = await Promise.all([
     fetchPropertyOptions(hubspotToken, RG_OBJECT, 'program_code'),
     fetchPropertyOptions(hubspotToken, RG_OBJECT, 'cancel_reason'),
+    fetchPropertyOptions(hubspotToken, RG_OBJECT, 'sold_by_1'),
   ]);
 
   // Paginate through ALL RG services (HubSpot returns max 100 per page). No artificial
@@ -391,8 +392,11 @@ async function fetchRGServices(hubspotToken, date_from) {
     if (l.includes('essential'))  return 'essential';
     if (l.includes('elite'))      return 'elite';
     if (l.includes('mosquito'))   return 'mosquito';
+    if (l.includes('aeration') || l.includes('signature')) return 'aeration';
     return 'other';
   }
+  const TIERS = ['basic', 'essential', 'elite', 'mosquito', 'aeration', 'other'];
+  const emptyTiers = () => Object.fromEntries(TIERS.map(t => [t, 0]));
 
   const active         = allServices.filter(s => p(s).program_status === STATUS_ACTIVE);
   const cancelled      = allServices.filter(s => p(s).program_status === STATUS_CANCELLED);
@@ -410,20 +414,30 @@ async function fetchRGServices(hubspotToken, date_from) {
   const newCancels     = cancelled.filter(s => p(s).hs_lastmodifieddate >= date_from);
 
   // Program type breakdown for new customers
-  const typeCount = { basic: 0, essential: 0, elite: 0, mosquito: 0, other: 0 };
+  const typeCount = emptyTiers();
   newCustomers.forEach(s => {
-    const label = resolveLabel(p(s).program_code);
-    const tier = classifyTier(label);
+    const tier = classifyTier(resolveLabel(p(s).program_code));
     typeCount[tier] = (typeCount[tier] || 0) + 1;
   });
 
   // Total active by tier (all active, not just new)
-  const activeByTier = { basic: 0, essential: 0, elite: 0, mosquito: 0, other: 0 };
+  const activeByTier = emptyTiers();
   active.forEach(s => {
-    const label = resolveLabel(p(s).program_code);
-    const tier = classifyTier(label);
+    const tier = classifyTier(resolveLabel(p(s).program_code));
     activeByTier[tier] = (activeByTier[tier] || 0) + 1;
   });
+
+  // Programs sold per rep this period (sold_by_1), broken down by tier — for the scorecard.
+  const byRep = {};
+  newCustomers.forEach(s => {
+    const rep = soldByMap[p(s).sold_by_1] || p(s).sold_by_1;
+    if (!rep) return;
+    if (!byRep[rep]) byRep[rep] = { rep, total: 0, ...emptyTiers() };
+    const tier = classifyTier(resolveLabel(p(s).program_code));
+    byRep[rep][tier] = (byRep[rep][tier] || 0) + 1;
+    byRep[rep].total++;
+  });
+  const programsByRep = Object.values(byRep).sort((a, b) => b.total - a.total);
 
   // Cancel reasons breakdown (resolved to labels)
   const cancelReasons = {};
@@ -443,6 +457,7 @@ async function fetchRGServices(hubspotToken, date_from) {
     newCancels:       newCancels.length,
     byType:           typeCount,
     activeByTier,
+    programsByRep,
     cancelReasons:    cancelReasonsList,
   };
 }
