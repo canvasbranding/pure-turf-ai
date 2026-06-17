@@ -398,8 +398,9 @@ async function fetchRGServices(hubspotToken, date_from) {
     fetchPropertyOptions(hubspotToken, RG_OBJECT, 'cancel_reason'),
   ]);
 
-  // Paginate through all RG services (HubSpot returns max 100 per page)
-  for (let page = 0; page < 50; page++) {
+  // Paginate through ALL RG services (HubSpot returns max 100 per page). No artificial
+  // cap — a low cap dropped the newest records (oldest-first), zeroing recent sales.
+  for (let page = 0; page < 200; page++) {
     const url = `https://api.hubapi.com/crm/v3/objects/${RG_OBJECT}?limit=100&archived=false&properties=${props}${after ? `&after=${after}` : ''}`;
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${hubspotToken}` },
