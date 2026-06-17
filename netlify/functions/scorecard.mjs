@@ -56,24 +56,29 @@ export default async (req) => {
   const { date_from, date_to } = getDateRange(rangeKey);
   const fromEpoch = new Date(`${date_from}T00:00:00Z`).getTime();
 
-  try {
-    const [calls, emails] = await Promise.all([
-      activityByOwner('calls', fromEpoch),
-      activityByOwner('emails', fromEpoch),
-    ]);
-    const reps = SALES_REP_IDS.map(id => ({
-      ownerId: id,
-      name: OWNER_NAMES[id],
-      calls: calls[id] || 0,
-      emails: emails[id] || 0,
-      activity: (calls[id] || 0) + (emails[id] || 0),
-    })).sort((a, b) => b.activity - a.activity);
+  // Fetch each activity type independently — a missing HubSpot scope on one (e.g.
+  // emails) shouldn't blank the whole scorecard.
+  const [callsR, emailsR] = await Promise.allSettled([
+    activityByOwner('calls', fromEpoch),
+    activityByOwner('emails', fromEpoch),
+  ]);
+  const calls  = callsR.status === 'fulfilled'  ? callsR.value  : {};
+  const emails = emailsR.status === 'fulfilled' ? emailsR.value : {};
+  const unavailable = [];
+  if (callsR.status !== 'fulfilled')  unavailable.push('calls');
+  if (emailsR.status !== 'fulfilled') unavailable.push('emails');
 
-    return new Response(JSON.stringify({ dateRange: rangeKey, dateFrom: date_from, dateTo: date_to, fetchedAt: new Date().toISOString(), reps }), {
-      status: 200,
-      headers: { ...CORS, 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=300, stale-while-revalidate=900' },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 200, headers: { ...CORS, 'Cache-Control': 'no-store' } });
-  }
+  const reps = SALES_REP_IDS.map(id => ({
+    ownerId: id,
+    name: OWNER_NAMES[id],
+    calls: calls[id] || 0,
+    emails: emails[id] || 0,
+    activity: (calls[id] || 0) + (emails[id] || 0),
+  })).sort((a, b) => b.activity - a.activity);
+
+  const ok = unavailable.length < 2;
+  return new Response(JSON.stringify({ dateRange: rangeKey, dateFrom: date_from, dateTo: date_to, fetchedAt: new Date().toISOString(), reps, unavailable }), {
+    status: 200,
+    headers: { ...CORS, ...(ok ? { 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=300, stale-while-revalidate=900' } : { 'Cache-Control': 'no-store' }) },
+  });
 };
