@@ -47,9 +47,10 @@ export default async (req) => {
   ]);
 
   if (new URL(req.url).searchParams.get('probe') === 'kw') {
-    const a = await sa(`${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}${cc}${periods}&page_size=15&order_by=position`);
-    const b = await sa(`${HOST.gsc}/search-console/api/v2/keyword-rankings/?selected_property=${prop}${cc}${periods}&page_size=15`);
-    return new Response(JSON.stringify({ keywords_status: a.status, keywords_sample: JSON.stringify(a.body).slice(0, 900), kr_status: b.status, kr_sample: JSON.stringify(b.body).slice(0, 900) }), { status: 200, headers: { ...CORS, 'Cache-Control':'no-store' } });
+    const p1 = `&period1_start=${ago(28)}&period1_end=${iso(today)}`;
+    const a = await sa(`${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}${cc}${p1}&page_size=15`);
+    const b = await sa(`${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}${cc}&date_from=${ago(28)}&date_to=${iso(today)}&page_size=15`);
+    return new Response(JSON.stringify({ p1_status: a.status, p1_sample: JSON.stringify(a.body).slice(0, 800), df_status: b.status, df_sample: JSON.stringify(b.body).slice(0, 800) }), { status: 200, headers: { ...CORS, 'Cache-Control':'no-store' } });
   }
 
   const out = { fetchedAt: new Date().toISOString(), errors: {} };
