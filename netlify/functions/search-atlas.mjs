@@ -86,5 +86,19 @@ export default async (req) => {
     });
   } else out.errors.gbp = `gbp ${gbp.status}`;
 
+  if (new URL(req.url).searchParams.get('debug') === '1') {
+    const rt0 = rows(rank)[0] || {};
+    return new Response(JSON.stringify({
+      rt_keys: Object.keys(rt0),
+      serps_overview: rt0.serps_overview,
+      search_visibility_report: rt0.search_visibility_report,
+      keywords_up_down_report: rt0.keywords_up_down_report,
+      estimated_traffic_report: rt0.estimated_traffic_report,
+      competitors: rt0.competitors,
+      gbp_attr_keys: gbp.body?.data?.[0] ? Object.keys(gbp.body.data[0].attributes || {}) : null,
+      gbp_attr_sample: gbp.body?.data?.[0]?.attributes || null,
+    }, null, 0), { status: 200, headers: { ...CORS, 'Cache-Control':'no-store' } });
+  }
+
   return new Response(JSON.stringify(out), { status: 200, headers: { ...CORS, 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=3600, stale-while-revalidate=86400' } });
 };
