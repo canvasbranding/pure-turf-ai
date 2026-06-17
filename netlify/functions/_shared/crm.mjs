@@ -77,6 +77,22 @@ export function leadSourceOf(props) {
   return { source: 'Unknown', auto: true };
 }
 
+// HubSpot GET with 429 retry/backoff. HubSpot enforces a rolling ~10-second request
+// limit; when we paginate large objects (deals + RG services) this can trip it, so we
+// wait (honoring Retry-After) and retry instead of failing the whole dashboard.
+export async function hubspotGet(url, token, { timeoutMs = 9000, retries = 5 } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(timeoutMs) });
+    if (res.status === 429 && attempt < retries) {
+      const ra = parseFloat(res.headers.get('Retry-After'));
+      const waitMs = Math.min((ra ? ra : 0.4 * Math.pow(2, attempt)) * 1000, 4000);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
+    return res;
+  }
+}
+
 // Fetch EVERY deal that belongs to the given pipeline(s), with NO truncation.
 //
 // We page through the regular GET /deals endpoint (which has a far more generous
@@ -94,10 +110,7 @@ export async function fetchDealsInPipelines(token, pipelineIds, properties, { ti
   let after = undefined;
   for (let p = 0; p < maxPages; p++) {
     const url = `https://api.hubapi.com/crm/v3/objects/deals?limit=100&archived=false&properties=${props}${after ? `&after=${after}` : ''}`;
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    const res = await hubspotGet(url, token, { timeoutMs });
     if (!res.ok) throw new Error(`HubSpot deals ${res.status}: ${await res.text()}`);
     const data = await res.json();
     all = all.concat(data.results || []);

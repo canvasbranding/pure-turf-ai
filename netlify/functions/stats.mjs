@@ -1,7 +1,7 @@
 // Pure Turf AI — Dashboard Stats + Goals Data Function
 import {
   PIPELINE_2026_SALES, PIPELINE_2026_COMMERCIAL, ACTIVE_PIPELINES, DEAL_STAGE_NAMES, DEAL_STAGES_WON, DEAL_STAGES_LOST,
-  OWNER_NAMES, CLOSE_RATE_EXCLUDED, REP_NOTES, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, fetchDealsInPipelines, leadSourceOf,
+  OWNER_NAMES, CLOSE_RATE_EXCLUDED, REP_NOTES, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, fetchDealsInPipelines, leadSourceOf, hubspotGet,
 } from './_shared/crm.mjs';
 
 const WINDSOR_KEY   = process.env.WINDSOR_API_KEY;
@@ -402,10 +402,7 @@ async function fetchRGServices(hubspotToken, date_from) {
   // cap — a low cap dropped the newest records (oldest-first), zeroing recent sales.
   for (let page = 0; page < 200; page++) {
     const url = `https://api.hubapi.com/crm/v3/objects/${RG_OBJECT}?limit=100&archived=false&properties=${props}${after ? `&after=${after}` : ''}`;
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${hubspotToken}` },
-      signal: AbortSignal.timeout(10000),
-    });
+    const res = await hubspotGet(url, hubspotToken, { timeoutMs: 10000 });
     if (!res.ok) throw new Error(`RG Services ${res.status}: ${await res.text()}`);
     const data = await res.json();
     allServices = allServices.concat(data.results || []);
