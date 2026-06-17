@@ -974,6 +974,28 @@ html[data-theme="dark"] .dv-kpi-card { background:rgba(255,255,255,0.04); }
 .pipe-toggle-btn:hover { color:var(--text-1); }
 .pipe-toggle-btn.active { background:var(--accent, #5E6AD2); color:#fff; }
 
+/* Query-log / search-activity view (David-only) */
+.ql-export { font-size:11px; font-weight:600; color:var(--accent,#5E6AD2); background:var(--accent-dim,rgba(94,106,210,0.12)); border:none; padding:4px 10px; border-radius:6px; cursor:pointer; }
+.ql-export:hover { filter:brightness(1.08); }
+.ql-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
+.ql-stat { background:var(--surface-2,rgba(127,127,127,0.08)); border-radius:9px; padding:10px 12px; }
+.ql-stat-val { font-size:20px; font-weight:700; color:var(--text-1); line-height:1.1; }
+.ql-stat-lbl { font-size:10px; color:var(--text-3); margin-top:2px; }
+.ql-userbars { display:flex; flex-direction:column; gap:5px; margin-bottom:14px; }
+.ql-userbar { display:flex; align-items:center; gap:10px; cursor:pointer; padding:3px 4px; border-radius:6px; }
+.ql-userbar:hover { background:rgba(127,127,127,0.08); }
+.ql-userbar-name { width:120px; font-size:11.5px; color:var(--text-2); flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ql-userbar-track { flex:1; height:7px; border-radius:4px; background:rgba(127,127,127,0.14); overflow:hidden; }
+.ql-userbar-fill { height:100%; background:var(--accent,#5E6AD2); border-radius:4px; }
+.ql-userbar-count { width:34px; text-align:right; font-size:11px; font-weight:600; color:var(--text-2); }
+.ql-search { width:100%; box-sizing:border-box; padding:8px 12px; border-radius:8px; border:1px solid var(--border-sm,rgba(127,127,127,0.2)); background:var(--surface-1,transparent); color:var(--text-1); font-size:12.5px; }
+.ql-search:focus { outline:none; border-color:var(--accent-bdr,#5E6AD2); box-shadow:0 0 0 3px var(--accent-dim,rgba(94,106,210,0.15)); }
+.ql-list { display:flex; flex-direction:column; gap:2px; }
+.ql-row { display:flex; gap:10px; align-items:flex-start; padding:9px 6px; border-bottom:1px solid rgba(127,127,127,0.08); }
+.ql-row-body { flex:1; min-width:0; }
+.ql-row-msg { font-size:12.5px; color:var(--text-1); line-height:1.4; word-break:break-word; }
+.ql-row-meta { font-size:10px; color:var(--text-3); margin-top:3px; }
+
 /* Data-health strip — surfaces failed/stale data sources */
 .data-health { font-size:11px; line-height:1.4; padding:7px 12px; border-radius:9px; margin:0 0 10px; display:flex; align-items:center; gap:7px; }
 .data-health-ok { color:var(--text-3); background:transparent; padding:2px 2px 8px; font-weight:500; }

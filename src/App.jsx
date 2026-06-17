@@ -952,6 +952,7 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
   const isDH = currentUser?.email === 'dhamby@pureturfllc.com';
   const [queryLogs, setQueryLogs] = React.useState([]);
   const [logsLoading, setLogsLoading] = React.useState(false);
+  const [logSearch, setLogSearch] = React.useState('');
 
   const fetchQueryLogs = React.useCallback(async () => {
     if (!isDH) return;
@@ -959,7 +960,7 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
     try {
       const res = await fetch('/.netlify/functions/query-logs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: currentUser.email, limit: 200 }),
+        body: JSON.stringify({ email: currentUser.email, limit: 500 }),
       });
       const d = await res.json();
       if (d.logs) setQueryLogs(d.logs);
@@ -1398,38 +1399,92 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
             </div>
           )}
 
-          {activeTab === 'query-log' && (
+          {activeTab === 'query-log' && (() => {
+            // Usage analytics, computed from the fetched logs (David-only view).
+            const now = Date.now();
+            const within7 = queryLogs.filter(l => l.created_at && now - new Date(l.created_at).getTime() < 7*864e5).length;
+            const today = queryLogs.filter(l => l.created_at && now - new Date(l.created_at).getTime() < 864e5).length;
+            const perUser = {};
+            queryLogs.forEach(l => {
+              const k = l.user_email || 'unknown';
+              if (!perUser[k]) perUser[k] = { name: l.user_name || k, email: k, count: 0 };
+              perUser[k].count++;
+            });
+            const users = Object.values(perUser).sort((a,b) => b.count - a.count);
+            const q = logSearch.trim().toLowerCase();
+            const filtered = q
+              ? queryLogs.filter(l => `${l.user_name} ${l.user_email} ${l.message}`.toLowerCase().includes(q))
+              : queryLogs;
+            const exportCsv = () => {
+              const esc = s => `"${String(s ?? '').replace(/"/g,'""')}"`;
+              const rows = [['Time','Name','Email','Query'], ...queryLogs.map(l => [l.created_at || '', l.user_name || '', l.user_email || '', l.message || ''])];
+              const blob = new Blob([rows.map(r => r.map(esc).join(',')).join('\n')], { type: 'text/csv' });
+              const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pure-turf-ai-queries.csv'; a.click();
+            };
+            return (
             <div className="admin-section">
               <div className="admin-section-hdr" style={{marginBottom:12}}>
-                <div className="admin-section-label">Recent Queries</div>
-                <div className="admin-section-hint">{logsLoading ? 'Loading…' : `${queryLogs.length} entries`}</div>
+                <div className="admin-section-label">Search Activity</div>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <div className="admin-section-hint">{logsLoading ? 'Loading…' : `${queryLogs.length} queries`}</div>
+                  {queryLogs.length > 0 && <button className="ql-export" onClick={exportCsv}>Export CSV</button>}
+                </div>
+              </div>
+
+              {!logsLoading && queryLogs.length > 0 && (
+                <>
+                  {/* Summary stats */}
+                  <div className="ql-stats">
+                    {[
+                      { label:'Total queries', val: queryLogs.length },
+                      { label:'Active users',  val: users.length },
+                      { label:'Last 7 days',   val: within7 },
+                      { label:'Today',         val: today },
+                    ].map(s => (
+                      <div key={s.label} className="ql-stat"><div className="ql-stat-val">{s.val}</div><div className="ql-stat-lbl">{s.label}</div></div>
+                    ))}
+                  </div>
+
+                  {/* Per-user breakdown */}
+                  <div className="admin-section-label" style={{margin:'4px 0 8px'}}>By User</div>
+                  <div className="ql-userbars">
+                    {users.map(u => (
+                      <div key={u.email} className="ql-userbar" onClick={() => setLogSearch(u.email)} title="Click to filter to this user">
+                        <div className="ql-userbar-name">{u.name}</div>
+                        <div className="ql-userbar-track"><div className="ql-userbar-fill" style={{width:`${Math.round(u.count/users[0].count*100)}%`}}/></div>
+                        <div className="ql-userbar-count">{u.count}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Search */}
+                  <input className="ql-search" placeholder="Search queries, names, emails…" value={logSearch} onChange={e=>setLogSearch(e.target.value)} />
+                </>
+              )}
+
+              <div className="admin-section-label" style={{margin:'12px 0 8px'}}>
+                {q ? `Matching “${logSearch}” · ${filtered.length}` : 'Recent Queries'}
               </div>
               {logsLoading ? (
                 <div className="dv-loading-rows">{[1,2,3].map(i=><div key={i} className="dv-row-skel"/>)}</div>
+              ) : filtered.length === 0 ? (
+                <div className="dv-empty" style={{padding:'18px 0'}}>{queryLogs.length === 0 ? 'No queries logged yet.' : 'No matches.'}</div>
               ) : (
-                <div className="admin-users-table">
-                  <div className="admin-user-hdr">
-                    <div className="au-col-user">User</div>
-                    <div style={{flex:1,fontSize:11,color:'var(--text-3)'}}>Query</div>
-                    <div className="au-col-login">Time</div>
-                  </div>
-                  {queryLogs.map((log, i) => (
-                    <div key={log.id || i} className="admin-user-row">
-                      <div className="au-col-user">
-                        <div className="perm-av" style={{width:28,height:28,fontSize:9}}>{(log.user_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
-                        <div>
-                          <div className="perm-name" style={{fontSize:11}}>{log.user_name}</div>
-                          <div className="perm-role" style={{fontSize:9}}>{log.user_email}</div>
-                        </div>
+                <div className="ql-list">
+                  {filtered.map((log, i) => (
+                    <div key={log.id || i} className="ql-row">
+                      <div className="perm-av" style={{width:30,height:30,fontSize:10,flexShrink:0}}>{(log.user_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+                      <div className="ql-row-body">
+                        <div className="ql-row-msg">{log.message}</div>
+                        <div className="ql-row-meta">{log.user_name} · {log.created_at ? new Date(log.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '–'}</div>
                       </div>
-                      <div style={{flex:1,fontSize:11.5,color:'var(--text-2)',padding:'0 12px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{log.message}</div>
-                      <div className="au-col-login" style={{fontSize:10}}>{log.created_at ? new Date(log.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' + new Date(log.created_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '–'}</div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>
