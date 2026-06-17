@@ -1,6 +1,9 @@
 // Pure Turf AI — Netlify Serverless Function
 import Anthropic from '@anthropic-ai/sdk';
-import { DEAL_STAGE_NAMES, OWNER_NAMES, getDateRange } from './_shared/crm.mjs';
+import {
+  DEAL_STAGE_NAMES, OWNER_NAMES, getDateRange, searchDeals,
+  PIPELINE_2026_SALES, PIPELINE_2026_COMMERCIAL, ACTIVE_PIPELINES,
+} from './_shared/crm.mjs';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const WINDSOR_KEY   = process.env.WINDSOR_API_KEY;
@@ -53,7 +56,7 @@ const tools = [
     input_schema: { type: 'object', properties: {
       pipeline_name: {
         type: 'string',
-        description: 'Pipeline name substring to filter by, e.g. "Sales" or "Commercial". Optional — if omitted returns all deals.',
+        description: 'Which pipeline to fetch: "Sales" (2026 Sales) or "Commercial" (2026 Commercial). Optional — if omitted, returns both 2026 pipelines. The legacy pipeline is never included.',
       },
       owner_name: {
         type: 'string',
@@ -85,54 +88,21 @@ async function getWindsor(datasource, date_from, date_to, rangeKey) {
   return data;
 }
 
-// Always use simple GET + client-side filter — avoids search endpoint 400 errors
+// Resolve a free-text pipeline name to the live pipeline id(s). Defaults to both
+// 2026 pipelines; the legacy "Sales Pipeline (default)" is never included.
+function resolvePipelines(pipeline_name) {
+  const n = (pipeline_name || '').toLowerCase();
+  if (n.includes('commercial')) return [PIPELINE_2026_COMMERCIAL];
+  if (n.includes('sales'))      return [PIPELINE_2026_SALES];
+  return ACTIVE_PIPELINES;
+}
+
 async function getPipelineDeals(pipeline_name = null, limit = 100, owner_name = null) {
   const props = 'dealname,amount,dealstage,pipeline,hubspot_owner_id,closedate,createdate,true_lead_source';
 
-  // Paginate through deals (up to 3 pages = 300 deals — kept small for 26s timeout)
-  let allResults = [];
-  let after = undefined;
-  for (let page = 0; page < 3; page++) {
-    const url = `https://api.hubapi.com/crm/v3/objects/deals?limit=100&properties=${props}&archived=false${after ? `&after=${after}` : ''}`;
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`HubSpot GET error ${res.status}: ${err}`);
-    }
-    const data = await res.json();
-    allResults = allResults.concat(data.results || []);
-    if (data.paging?.next?.after) { after = data.paging.next.after; }
-    else break;
-  }
-
+  // Fetch the COMPLETE set of deals for the requested pipeline(s), server-side filtered.
+  const { rows: allResults } = await searchDeals(HUBSPOT_TOKEN, { pipelines: resolvePipelines(pipeline_name), properties: props });
   let results = allResults;
-
-  // Fetch pipeline definitions for name-based filtering
-  let pipelinesRes = null;
-  if (pipeline_name) {
-    try {
-      pipelinesRes = await fetch('https://api.hubapi.com/crm/v3/pipelines/deals', {
-        headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` },
-      });
-    } catch {}
-  }
-
-  // Client-side filter by pipeline name
-  if (pipeline_name && pipelinesRes?.ok) {
-    try {
-      const plData = await pipelinesRes.json();
-      const matched = (plData.results || []).filter(p =>
-        p.label.toLowerCase().includes(pipeline_name.toLowerCase())
-      );
-      if (matched.length > 0) {
-        const matchedIds = new Set(matched.map(p => p.id));
-        results = results.filter(d => matchedIds.has(d.properties.pipeline));
-      }
-    } catch (e) { /* ignore, return unfiltered */ }
-  }
 
   // Filter by owner name
   if (owner_name) {

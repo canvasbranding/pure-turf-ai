@@ -4,8 +4,10 @@
 // pipeline ids, or date math. The `_shared` folder is ignored by Netlify's
 // function bundler (leading underscore), so this is never deployed as an endpoint.
 
-// HubSpot "2026 Sales" pipeline — the one the dashboard tracks.
+// The two live pipelines. The legacy "Sales Pipeline (default)" is never used.
 export const PIPELINE_2026_SALES = '853190025';
+export const PIPELINE_2026_COMMERCIAL = '878177085';
+export const ACTIVE_PIPELINES = [PIPELINE_2026_SALES, PIPELINE_2026_COMMERCIAL];
 
 // Deal stage id → human label.
 export const DEAL_STAGE_NAMES = {
@@ -45,6 +47,56 @@ export const NON_SALES_STAFF = new Set([
 
 // Campaign name fragments excluded from ad totals (mosquito line of business).
 export const EXCLUDED_CAMPAIGNS = ['mosquito', 'pmax - mosquito', 'pmax mosquito'];
+
+// Fetch EVERY deal in the given pipeline(s) via HubSpot's Search API.
+// Filtering happens server-side, so we only pull the pipelines we want and never
+// truncate them — unlike the old "GET all deals, then filter" approach, which
+// silently dropped any deal past the page cap (and HubSpot returns oldest-first,
+// so the dropped deals were the most recent — exactly the ones that matter).
+//
+// The first page reports the true `total`; remaining pages are fetched in
+// parallel (bounded concurrency) using offset-based `after`, so several thousand
+// deals come back in a couple of seconds instead of ~40 slow sequential round
+// trips that would risk the function timeout. Returns { rows, total }.
+export async function searchDeals(token, { pipelines, properties, sort = 'createdate', timeoutMs = 9000, concurrency = 4 }) {
+  const pids = Array.isArray(pipelines) ? pipelines : [pipelines];
+  const filters = pids.length === 1
+    ? [{ propertyName: 'pipeline', operator: 'EQ', value: pids[0] }]
+    : [{ propertyName: 'pipeline', operator: 'IN', values: pids }];
+  const props = Array.isArray(properties) ? properties : properties.split(',');
+
+  const page = async (after) => {
+    const res = await fetch('https://api.hubapi.com/crm/v3/objects/deals/search', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(timeoutMs),
+      body: JSON.stringify({
+        filterGroups: [{ filters }],
+        properties: props,
+        sorts: [{ propertyName: sort, direction: 'DESCENDING' }],
+        limit: 100,
+        ...(after ? { after: String(after) } : {}),
+      }),
+    });
+    if (!res.ok) throw new Error(`HubSpot deal search ${res.status}: ${await res.text()}`);
+    return res.json();
+  };
+
+  const first = await page(0);
+  const total = first.total || 0;
+  const rows = [...(first.results || [])];
+
+  // Remaining offsets (HubSpot caps search paging at 10,000 results).
+  const offsets = [];
+  for (let o = 100; o < total && o < 10000; o += 100) offsets.push(o);
+
+  for (let i = 0; i < offsets.length; i += concurrency) {
+    const batch = offsets.slice(i, i + concurrency);
+    const pages = await Promise.all(batch.map(page));
+    pages.forEach(p => rows.push(...(p.results || [])));
+  }
+  return { rows, total };
+}
 
 // Resolve a date range key ('7d' | '30d' | '90d' | 'ytd' | 'mtd'/default) to from/to dates.
 export function getDateRange(rangeKey) {

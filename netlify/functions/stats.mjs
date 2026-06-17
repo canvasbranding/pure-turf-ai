@@ -1,7 +1,7 @@
 // Pure Turf AI — Dashboard Stats + Goals Data Function
 import {
   PIPELINE_2026_SALES, DEAL_STAGE_NAMES, DEAL_STAGES_WON, DEAL_STAGES_LOST, EARLY_STAGES,
-  OWNER_NAMES, CLOSE_RATE_EXCLUDED, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange,
+  OWNER_NAMES, CLOSE_RATE_EXCLUDED, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, searchDeals,
 } from './_shared/crm.mjs';
 
 const WINDSOR_KEY   = process.env.WINDSOR_API_KEY;
@@ -32,25 +32,9 @@ async function fetchHubSpotDeals(date_from) {
     return map;
   }).catch(() => ({}));
 
-  // Paginate through ALL deals using GET endpoint
-  let allDeals = [];
-  let after = undefined;
-  for (let page = 0; page < 30; page++) {
-    const url = `https://api.hubapi.com/crm/v3/objects/deals?limit=100&archived=false&properties=${props}${after ? `&after=${after}` : ''}`;
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok) throw new Error(`HubSpot deals ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    allDeals = allDeals.concat(data.results || []);
-    if (data.paging?.next?.after) { after = data.paging.next.after; }
-    else break;
-  }
-
-  // Filter to 2026 Sales pipeline only
-  const deals = allDeals.filter(d => d.properties.pipeline === PIPELINE_2026_SALES);
-  console.log(`[DEALS] Fetched ${allDeals.length} total deals, ${deals.length} in 2026 Sales pipeline`);
+  // Fetch the COMPLETE 2026 Sales pipeline server-side (no truncation).
+  const { rows: deals, total: totalDeals } = await searchDeals(HUBSPOT_TOKEN, { pipelines: PIPELINE_2026_SALES, properties: props });
+  console.log(`[DEALS] Fetched ${deals.length}/${totalDeals} deals in 2026 Sales pipeline`);
   const stageMap = await stageMapPromise;
   console.log(`[DEALS] Stage map:`, JSON.stringify(stageMap));
   const getStageName = (id) => stageMap[id] || DEAL_STAGE_NAMES[id] || id || 'Unknown';
@@ -163,7 +147,7 @@ async function fetchHubSpotDeals(date_from) {
     });
   const taggedLeads = newLeadDeals.length - (bySource['Unassigned'] || 0);
 
-  return { total: deals.length, totalAll: allDeals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads };
+  return { total: totalDeals, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads };
 }
 
 // In-memory result cache. Netlify reuses warm function instances, so this persists
