@@ -100,7 +100,18 @@ function relTime(iso) {
 function DataHealthBanner({ liveStats, statsLoading }) {
   if (!liveStats || statsLoading) return null;
   const failed = Object.keys(liveStats.errors || {});
+  const warnings = liveStats.warnings || [];
   const updated = relTime(liveStats.fetchedAt);
+  // Sanity-guard warnings (e.g. a sudden deal-count collapse) take priority — that's
+  // exactly the silent-corruption signal we want surfaced loudest.
+  if (warnings.length > 0) {
+    return (
+      <div className="data-health data-health-warn" role="status">
+        <span className="dh-dot" aria-hidden="true">⚠</span>
+        <span>{warnings.join(' ')} Double-check before relying on these figures.</span>
+      </div>
+    );
+  }
   if (failed.length === 0) {
     return updated ? <div className="data-health data-health-ok">Live data · updated {updated}</div> : null;
   }

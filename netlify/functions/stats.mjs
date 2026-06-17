@@ -1,4 +1,5 @@
 // Pure Turf AI — Dashboard Stats + Goals Data Function
+import { getStore } from '@netlify/blobs';
 import {
   PIPELINE_2026_SALES, DEAL_STAGE_NAMES, DEAL_STAGES_WON, DEAL_STAGES_LOST, EARLY_STAGES,
   OWNER_NAMES, CLOSE_RATE_EXCLUDED, REP_NOTES, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, fetchDealsInPipelines, leadSourceOf,
@@ -164,17 +165,40 @@ async function fetchHubSpotDeals(date_from) {
 const STATS_CACHE = new Map(); // rangeKey -> { at: epochMs, body: string }
 const CACHE_TTL_MS = 300000;   // 5 minutes (kept warm by keep-warm.mjs every 4 min)
 
+// Durable snapshot (Netlify Blobs). Survives cold starts / instance recycles, so a
+// user who hits a cold function gets the last good result INSTANTLY instead of
+// waiting ~11s for the full HubSpot fetch. keep-warm refreshes it every 4 min.
+const SNAPSHOT_SERVE_MAX = 900000; // serve a durable snapshot up to 15 min old without recomputing
+function snapStore() { return getStore({ name: 'pt-stats' }); }
+async function readSnapshot(rangeKey) {
+  try { return await snapStore().get(`stats-${rangeKey}`, { type: 'json' }); } catch { return null; }
+}
+async function writeSnapshot(rangeKey, total, body) {
+  try { await snapStore().setJSON(`stats-${rangeKey}`, { at: Date.now(), total, body }); } catch { /* cache is best-effort */ }
+}
+
 export const handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
   const rangeKey = event.queryStringParameters?.range || 'mtd';
+  const isWarm = event.queryStringParameters?.warm === '1'; // keep-warm forces a real recompute
   const { date_from, date_to } = getDateRange(rangeKey);
+  const cdnHeaders = { 'Cache-Control': 'public, max-age=0, must-revalidate', 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=180, stale-while-revalidate=600' };
 
-  // Fast path: serve a recent cached result if we have one.
+  // Fast path 1: recent in-memory result on this warm instance.
   const cached = STATS_CACHE.get(rangeKey);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
-    return { statusCode: 200, headers: { ...headers, 'Cache-Control': 'public, max-age=0, must-revalidate', 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=180, stale-while-revalidate=600' }, body: cached.body };
+  if (!isWarm && cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return { statusCode: 200, headers: { ...headers, ...cdnHeaders }, body: cached.body };
+  }
+
+  // Fast path 2: durable snapshot — instant even on a cold instance. Avoids the ~11s
+  // wait (and possible timeout) when the in-memory cache is empty. keep-warm keeps it
+  // fresh; we still recompute if it's older than SNAPSHOT_SERVE_MAX (keep-warm down).
+  let prevSnap = await readSnapshot(rangeKey);
+  if (!isWarm && prevSnap?.body && Date.now() - prevSnap.at < SNAPSHOT_SERVE_MAX) {
+    STATS_CACHE.set(rangeKey, { at: prevSnap.at, body: prevSnap.body });
+    return { statusCode: 200, headers: { ...headers, ...cdnHeaders }, body: prevSnap.body };
   }
 
   const [googleResult, metaResult, gbpResult, hubspotResult, rgResult] = await Promise.allSettled([
@@ -315,21 +339,28 @@ export const handler = async (event) => {
     stats.errors.rgServices = rgResult.reason?.message;
   }
 
-  // CDN caching: HubSpot/Windsor queries take ~10s, so serve the computed result
-  // from Netlify's edge instead of re-querying on every page load. Only one request
-  // every few minutes hits the slow APIs; everyone else gets an instant response.
-  // stale-while-revalidate means the refresh happens in the background — users never wait.
-  // Don't cache a response that had a fetch error (would pin broken data for minutes).
+  // Data-sanity guard: if the deal count collapsed versus the last good reading, the
+  // fetch is probably incomplete (exactly the failure mode of the old truncation bug).
+  // Flag it for the dashboard banner — and DON'T persist it, so a bad reading can't
+  // poison the cache; the durable snapshot keeps serving last-good to everyone else.
+  const prevTotal = prevSnap?.total || 0;
+  const newTotal  = stats.pipeline?.total || 0;
+  let suspicious = false;
+  if (prevTotal > 100 && newTotal < prevTotal * 0.6) {
+    suspicious = true;
+    stats.warnings = [`Deal count dropped from ${prevTotal.toLocaleString()} to ${newTotal.toLocaleString()} since the last reading — figures may be incomplete.`];
+  }
+
+  // CDN caching: the HubSpot fetch takes ~11s, so serve the computed result from
+  // Netlify's edge + a durable snapshot instead of re-querying on every load.
+  // Don't cache a response that errored or looks incomplete (would pin broken data).
   const hasErrors = Object.keys(stats.errors).length > 0;
   const body = JSON.stringify(stats);
-  // Only cache a clean response — never pin a partial/errored result.
-  if (!hasErrors) STATS_CACHE.set(rangeKey, { at: Date.now(), body });
-  const cacheHeaders = hasErrors
-    ? { 'Cache-Control': 'no-store' }
-    : {
-        'Cache-Control': 'public, max-age=0, must-revalidate',
-        'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=180, stale-while-revalidate=600',
-      };
+  if (!hasErrors && !suspicious) {
+    STATS_CACHE.set(rangeKey, { at: Date.now(), body });
+    await writeSnapshot(rangeKey, newTotal, body);
+  }
+  const cacheHeaders = (hasErrors || suspicious) ? { 'Cache-Control': 'no-store' } : cdnHeaders;
   return { statusCode: 200, headers: { ...headers, ...cacheHeaders }, body };
 };
 

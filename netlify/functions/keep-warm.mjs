@@ -4,8 +4,10 @@
 export default async () => {
   const base = process.env.URL || process.env.DEPLOY_PRIME_URL || 'https://pureturfai.netlify.app';
   const ranges = ['mtd', 'ytd']; // the two most-used dashboard ranges
+  // warm=1 forces a real recompute (bypasses the in-memory + durable snapshot caches),
+  // so this is what actually refreshes the durable snapshot users are served from.
   const results = await Promise.allSettled(
-    ranges.map(r => fetch(`${base}/.netlify/functions/stats?range=${r}`))
+    ranges.map(r => fetch(`${base}/.netlify/functions/stats?range=${r}&warm=1`))
   );
   const ok = results.filter(r => r.status === 'fulfilled').length;
   console.log(`[keep-warm] refreshed ${ok}/${ranges.length} ranges`);
