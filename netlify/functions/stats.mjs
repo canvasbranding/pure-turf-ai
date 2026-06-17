@@ -183,15 +183,6 @@ export const handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
-  // Temporary probe: list RG Services date/sold properties to find the real signup field.
-  if (event.queryStringParameters?.rgprops === '1') {
-    const r = await fetch('https://api.hubapi.com/crm/v3/properties/2-54724126', { headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` } });
-    const data = await r.json();
-    const matches = (data.results || [])
-      .filter(p => /sold|sale|date|start|signup|sign_up/i.test(p.name) || /sold|sale|date|start|signup/i.test(p.label || ''))
-      .map(p => ({ name: p.name, label: p.label, type: p.type }));
-    return { statusCode: 200, headers, body: JSON.stringify(matches) };
-  }
 
   const rangeKey = event.queryStringParameters?.range || 'mtd';
   const isWarm = event.queryStringParameters?.warm === '1'; // keep-warm forces a real recompute
@@ -397,7 +388,7 @@ async function fetchRGServices(hubspotToken, date_from) {
   const STATUS_CANCEL_PENDING = '6';
   const STATUS_ACTIVE        = '9';
 
-  const props = 'program_status,program_code,cancel_reason,createdate,hs_lastmodifieddate';
+  const props = 'program_status,program_code,cancel_reason,createdate,hs_lastmodifieddate,sold_date';
   let allServices = [];
   let after = undefined;
 
@@ -437,8 +428,15 @@ async function fetchRGServices(hubspotToken, date_from) {
   const cancelled      = allServices.filter(s => p(s).program_status === STATUS_CANCELLED);
   const cancelPending  = allServices.filter(s => p(s).program_status === STATUS_CANCEL_PENDING);
 
-  // New customers this period (created_date >= date_from)
-  const newCustomers   = active.filter(s => p(s).createdate >= date_from);
+  // New customers this period — by SOLD DATE (when the deal was actually sold), NOT
+  // createdate (which is the HubSpot import date, so it read 0). Count non-cancelled
+  // services sold in the period. sold_date is a HubSpot `date` (ISO string or epoch ms).
+  const soldDay = (s) => {
+    const v = p(s).sold_date;
+    if (!v) return null;
+    return /^\d{12,}$/.test(String(v)) ? new Date(Number(v)).toISOString().slice(0, 10) : String(v).slice(0, 10);
+  };
+  const newCustomers   = allServices.filter(s => p(s).program_status !== STATUS_CANCELLED && (soldDay(s) || '') >= date_from);
   const newCancels     = cancelled.filter(s => p(s).hs_lastmodifieddate >= date_from);
 
   // Program type breakdown for new customers
