@@ -70,10 +70,11 @@ const GOAL_ADMIN_EMAILS = ['david@pureturfllc.com', 'kdryden@pureturfllc.com', '
 const TEAM_GOALS_EMAILS = ['david@pureturfllc.com', 'kdryden@pureturfllc.com', 'rbone@pureturfllc.com', 'dhamby@pureturfllc.com'];
 
 const DEFAULT_PERMISSIONS = {
-  admin:        { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: true,  mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: true  },
-  owner:        { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: true,  mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: false },
+  // finance: hidden for now (QuickBooks integration stays built — flip these to true to restore).
+  admin:        { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: true  },
+  owner:        { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: false },
   marketing:    { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: false },
-  executive:    { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: true,  mondayBrief: true,  adminPanel: false, goalAdmin: true,  teamGoals: true,  manageUsers: false },
+  executive:    { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: false, goalAdmin: true,  teamGoals: true,  manageUsers: false },
   sales_manager:{ googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: true,  goalAdmin: false, teamGoals: true,  manageUsers: false },
   sales:        { googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: false, goalAdmin: false, teamGoals: false, manageUsers: false },
 };
@@ -1997,6 +1998,7 @@ function AppInner() {
   const [sidebarOpen,   setSidebarOpen]   = useState(true);
   const isMobile = useMobile();
   const [mobileTab,     setMobileTab]     = useState('dashboard');
+  const [moreOpen,      setMoreOpen]      = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [loginStep,     setLoginStep]     = useState(() => {
     const saved = getSavedEmail();
@@ -2389,6 +2391,7 @@ function AppInner() {
   // ── MOBILE TAB HANDLER ──────────────────────────────────────────────
   const handleMobileTab = useCallback((tab) => {
     setMobileTab(tab);
+    setMoreOpen(false);
     if (tab === 'chat') setHasUnreadChat(false);
     if (tab !== 'chat') setMainView(tab);
   }, []);
@@ -2713,7 +2716,11 @@ function AppInner() {
             {isMobile && (
               <header className="mobile-header">
                 <span className="mobile-header-title">
-                  {mobileTab === 'chat' ? 'Pure Turf AI' : mobileTab === 'goals' ? 'Goals' : mobileTab === 'google-ads' ? 'Google Ads' : mobileTab === 'pipeline' ? 'Pipeline' : 'Dashboard'}
+                  {mobileTab === 'chat' ? 'Pure Turf AI' : ({
+                    dashboard: 'Dashboard', goals: 'Goals', 'google-ads': 'Google Ads',
+                    gbp: 'GBP', pipeline: 'Pipeline', scorecard: 'Scorecard',
+                    search: 'Search & Visibility', finance: 'Finance',
+                  }[mainView] || 'Dashboard')}
                 </span>
                 <div className="mobile-header-right">
                   {mobileTab !== 'chat' && (
@@ -2907,24 +2914,54 @@ function AppInner() {
 
             </div>{/* /split-area */}
 
+            {/* MOBILE "MORE" SHEET — reaches every section that doesn't fit the bar */}
+            {isMobile && moreOpen && (
+              <div className="more-sheet-overlay" onClick={()=>setMoreOpen(false)}>
+                <div className="more-sheet" onClick={e=>e.stopPropagation()}>
+                  <div className="more-sheet-grip"/>
+                  <div className="more-sheet-title">Sections</div>
+                  <div className="more-sheet-grid">
+                    {[
+                      { view:'goals',       icon:'goals',    label:'Goals',     show:true },
+                      { view:'google-ads',  icon:'chart',    label:'Google Ads', show:perms.googleAds },
+                      { view:'gbp',         icon:'gbp',      label:'GBP',       show:perms.gbp },
+                      { view:'finance',     icon:'finance',  label:'Finance',   show:perms.finance },
+                      { view:'scorecard',   icon:'briefing', label:'Scorecard', show:perms.teamGoals },
+                      { view:'search',      icon:'chart',    label:'Search & Visibility', show:perms.teamGoals },
+                    ].filter(i=>i.show).map(i => (
+                      <button key={i.view}
+                        className={`more-sheet-item${mainView===i.view && mobileTab!=='chat'?' active':''}`}
+                        onClick={()=>handleMobileTab(i.view)}>
+                        <Icon name={i.icon} size={20}/>
+                        <span>{i.label}</span>
+                      </button>
+                    ))}
+                    {perms.adminPanel && (
+                      <button className="more-sheet-item" onClick={()=>{ setMoreOpen(false); setScreen('admin'); }}>
+                        <Icon name="admin" size={20}/><span>Admin</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* MOBILE BOTTOM TAB BAR */}
-            {isMobile && (
+            {isMobile && (() => {
+              const inMore = moreOpen || ['gbp','scorecard','search','finance','goals','google-ads'].includes(mainView) && mobileTab!=='chat';
+              return (
             <nav className="bottom-tab-bar" role="tablist">
-              <button className={`tab-item${mobileTab==='dashboard'?' active':''}`} onClick={()=>handleMobileTab('dashboard')} aria-label="Home">
+              <button className={`tab-item${mobileTab==='dashboard'&&!moreOpen?' active':''}`} onClick={()=>handleMobileTab('dashboard')} aria-label="Home">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
                 <span className="tab-label">Home</span>
               </button>
-              <button className={`tab-item${mobileTab==='goals'?' active':''}`} onClick={()=>handleMobileTab('goals')} aria-label="Goals">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6-6 6 6"/><path d="M12 3v14"/><path d="M5 21h14"/></svg>
-                <span className="tab-label">Goals</span>
-              </button>
-              <button className={`tab-item${mobileTab==='google-ads'?' active':''}`} onClick={()=>handleMobileTab('google-ads')} aria-label="Ads">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-7 4 4 5-9"/></svg>
-                <span className="tab-label">Ads</span>
-              </button>
-              <button className={`tab-item${mobileTab==='pipeline'?' active':''}`} onClick={()=>handleMobileTab('pipeline')} aria-label="Pipeline">
+              <button className={`tab-item${mobileTab==='pipeline'&&!moreOpen?' active':''}`} onClick={()=>handleMobileTab('pipeline')} aria-label="Pipeline">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v3l-6 5v6l-4 2v-8L4 7z"/></svg>
                 <span className="tab-label">Pipeline</span>
+              </button>
+              <button className={`tab-item${inMore?' active':''}`} onClick={()=>setMoreOpen(o=>!o)} aria-label="More sections">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+                <span className="tab-label">More</span>
               </button>
               <button className={`tab-item${mobileTab==='chat'?' active':''}`} onClick={()=>handleMobileTab('chat')} aria-label="Chat" style={{position:'relative'}}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12c0 4.418-4.03 8-9 8-1.4 0-2.73-.25-3.9-.7L3 21l1.5-4.2C3.56 15.36 3 13.74 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
@@ -2932,7 +2969,8 @@ function AppInner() {
                 {hasUnreadChat && <span className="tab-badge"/>}
               </button>
             </nav>
-            )}
+              );
+            })()}
 
           </div>{/* /main-area */}
         </div>
