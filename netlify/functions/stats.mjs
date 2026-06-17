@@ -169,12 +169,15 @@ const CACHE_TTL_MS = 300000;   // 5 minutes (kept warm by keep-warm.mjs every 4 
 // user who hits a cold function gets the last good result INSTANTLY instead of
 // waiting ~11s for the full HubSpot fetch. keep-warm refreshes it every 4 min.
 const SNAPSHOT_SERVE_MAX = 900000; // serve a durable snapshot up to 15 min old without recomputing
+let LAST_BLOB_ERR = null;
 function snapStore() { return getStore({ name: 'pt-stats' }); }
 async function readSnapshot(rangeKey) {
-  try { return await snapStore().get(`stats-${rangeKey}`, { type: 'json' }); } catch { return null; }
+  try { return await snapStore().get(`stats-${rangeKey}`, { type: 'json' }); }
+  catch (e) { LAST_BLOB_ERR = `read: ${e.message}`; return null; }
 }
 async function writeSnapshot(rangeKey, total, body) {
-  try { await snapStore().setJSON(`stats-${rangeKey}`, { at: Date.now(), total, body }); } catch { /* cache is best-effort */ }
+  try { await snapStore().setJSON(`stats-${rangeKey}`, { at: Date.now(), total, body }); }
+  catch (e) { LAST_BLOB_ERR = `write: ${e.message}`; }
 }
 
 export const handler = async (event) => {
@@ -359,6 +362,9 @@ export const handler = async (event) => {
   if (!hasErrors && !suspicious) {
     STATS_CACHE.set(rangeKey, { at: Date.now(), body });
     await writeSnapshot(rangeKey, newTotal, body);
+  }
+  if (event.queryStringParameters?.debug === '1') {
+    return { statusCode: 200, headers, body: JSON.stringify({ _blobErr: LAST_BLOB_ERR, total: newTotal }) };
   }
   const cacheHeaders = (hasErrors || suspicious) ? { 'Cache-Control': 'no-store' } : cdnHeaders;
   return { statusCode: 200, headers: { ...headers, ...cacheHeaders }, body };
