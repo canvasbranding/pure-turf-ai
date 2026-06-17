@@ -43,7 +43,7 @@ export default async (req) => {
     sa(`${HOST.gsc}/search-console/api/v2/pages/?selected_property=${prop}${cc}${periods}&page_size=10&order_by=-clicks`),
     sa(`${HOST.gbp}/api/gbp/v2/locations/`, 'application/vnd.api+json'),
     sa(`${HOST.keyword}/api/v1/rank-tracker/`),
-    sa(`${HOST.gbp}/api/gbp/v1/reviews/star-rating-count/`, 'application/vnd.api+json'),
+    sa(`${HOST.gbp}/api/gbp/v1/reviews/star-rating-count/`, 'application/json'),
   ]);
 
   const out = { fetchedAt: new Date().toISOString(), errors: {} };
