@@ -29,40 +29,6 @@ export default async (req) => {
   if (req.method === 'OPTIONS') return new Response('', { status: 200, headers: CORS });
   if (!KEY) return new Response(JSON.stringify({ error: 'SEARCHATLAS_API_KEY not set' }), { status: 500, headers: CORS });
 
-  // ── TEMP PROBE: discover the GBP location-performance REST endpoint ──────────
-  if (new URL(req.url).searchParams.get('probe') === 'gbpperf') {
-    const locsRes = await sa(`${HOST.gbp}/api/gbp/v2/locations/`, 'application/vnd.api+json');
-    const locs = (locsRes.body?.data || []).map(l => ({ id: l.id, name: l.attributes?.business_name || l.attributes?.title }));
-    const id = locs[locs.length - 1]?.id; // 87554 (Atlas Dr, has data)
-    const qs = 'start_date=2026-06-01&end_date=2026-06-17';
-    const JAPI = 'application/vnd.api+json';
-    const candidates = [
-      [`${HOST.gbp}/api/gbp/v2/locations/${id}/`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/locations/${id}/performance/?${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/locations/${id}/daily-metrics/?${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/locations/${id}/google-metrics/?${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/locations/${id}/performance-metrics/?${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/locations/${id}/analytics/?${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/locations/${id}/insights/?${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/locations/${id}/metrics/?${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/performance/?location=${id}&${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/location-performance/?location=${id}&${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v3/locations/${id}/performance/?${qs}`, JAPI],
-      [`https://api.searchatlas.com/api/gbp/v2/locations/${id}/performance/?${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/locations/${id}/multi-daily-metrics/?${qs}`, JAPI],
-      [`${HOST.gbp}/api/gbp/v2/locations/${id}/performance-report/?${qs}`, JAPI],
-    ];
-    const results = [];
-    for (const [url, acc] of candidates) {
-      const r = await sa(url, acc);
-      let info;
-      if (r.body && typeof r.body === 'object') info = JSON.stringify(r.body).slice(0, 280);
-      else info = String(r.body).slice(0, 90);
-      results.push({ url: url.replace(HOST.gbp, '').replace('https://api.searchatlas.com', '[api]'), status: r.status, body: info });
-    }
-    return new Response(JSON.stringify({ ids: locs.map(l=>l.id), probed: results }, null, 2), { status: 200, headers: CORS });
-  }
-
   const today = new Date();
   const iso = d => d.toISOString().slice(0, 10);
   const ago = n => { const d = new Date(today); d.setDate(d.getDate() - n); return iso(d); };
