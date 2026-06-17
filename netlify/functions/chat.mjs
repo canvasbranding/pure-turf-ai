@@ -1,7 +1,7 @@
 // Pure Turf AI — Netlify Serverless Function
 import Anthropic from '@anthropic-ai/sdk';
 import {
-  DEAL_STAGE_NAMES, OWNER_NAMES, getDateRange, fetchDealsInPipelines,
+  DEAL_STAGE_NAMES, OWNER_NAMES, getDateRange, fetchDealsInPipelines, leadSourceOf,
   PIPELINE_2026_SALES, PIPELINE_2026_COMMERCIAL, ACTIVE_PIPELINES,
 } from './_shared/crm.mjs';
 
@@ -98,7 +98,7 @@ function resolvePipelines(pipeline_name) {
 }
 
 async function getPipelineDeals(pipeline_name = null, limit = 100, owner_name = null) {
-  const props = 'dealname,amount,dealstage,pipeline,hubspot_owner_id,closedate,createdate,true_lead_source';
+  const props = 'dealname,amount,dealstage,pipeline,hubspot_owner_id,closedate,createdate,true_lead_source,hs_analytics_source';
 
   // Fetch the COMPLETE set of deals for the requested pipeline(s).
   const { rows: allResults } = await fetchDealsInPipelines(HUBSPOT_TOKEN, resolvePipelines(pipeline_name), props);
@@ -119,7 +119,7 @@ async function getPipelineDeals(pipeline_name = null, limit = 100, owner_name = 
     stage:       DEAL_STAGE_NAMES[deal.properties.dealstage] || deal.properties.dealstage,
     pipeline_id: deal.properties.pipeline,
     owner:       OWNER_NAMES[deal.properties.hubspot_owner_id] || 'Unassigned',
-    source:      deal.properties.true_lead_source || 'Unassigned',
+    source:      leadSourceOf(deal.properties).source,
     closedate:   deal.properties.closedate,
     createdate:  deal.properties.createdate,
   }));
@@ -219,7 +219,7 @@ Rules:
 - Format with clear sections/headings when the answer is multi-topic.
 - NEVER explain tool limitations, API constraints, or how you got the data. Just present the answer confidently.
 - If data is incomplete, give the best answer from what's available without caveats.
-- Lead source: "where did leads come from?" is answered by True Lead Source on deals (liveStats.hubspot.leadSources, or bySource from the pipeline tool). "Unassigned" means the deal was never tagged — it is NOT a channel. When a large share is Unassigned, say so plainly and flag it as a data-tagging gap to fix, and base any source percentages on the tagged leads.
+- Lead source: "where did leads come from?" is answered by liveStats.hubspot.leadSources (or bySource from the pipeline tool). This BLENDS two signals: the rep-tagged True Lead Source (granular, e.g. "Google PPC - Search") when present, otherwise HubSpot's auto-captured Original Traffic Source (coarse: Paid Search, Paid Social, Direct Traffic, Organic Search, Offline / Manual Entry, Referrals). leadSources rows flagged autoOnly are auto-derived, not hand-tagged; taggedLeads is how many reps hand-tagged. Treat the blended breakdown as reliable for channel-level questions. "Offline / Manual Entry" means HubSpot couldn't auto-attribute it (usually a rep-entered lead) — encourage tagging True Lead Source for those. Only "Unknown" means no source at all.
 
 Company context:
 - Pure Turf LLC, Middle Tennessee. Services: lawn care, mosquito control.

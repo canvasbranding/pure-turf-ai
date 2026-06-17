@@ -51,6 +51,32 @@ export const NON_SALES_STAFF = new Set([
 // Campaign name fragments excluded from ad totals (mosquito line of business).
 export const EXCLUDED_CAMPAIGNS = ['mosquito', 'pmax - mosquito', 'pmax mosquito'];
 
+// HubSpot Original Traffic Source (hs_analytics_source) enum → friendly label.
+export const HS_SOURCE_LABELS = {
+  ORGANIC_SEARCH: 'Organic Search',
+  PAID_SEARCH: 'Paid Search',
+  PAID_SOCIAL: 'Paid Social',
+  SOCIAL_MEDIA: 'Organic Social',
+  DIRECT_TRAFFIC: 'Direct Traffic',
+  REFERRALS: 'Referrals',
+  EMAIL_MARKETING: 'Email',
+  OTHER_CAMPAIGNS: 'Other Campaigns',
+  OFFLINE: 'Offline / Manual Entry',
+};
+
+// Blended lead source for a deal. Prefer the human-tagged True Lead Source
+// (granular, e.g. "Google PPC - Search"); fall back to HubSpot's auto-captured
+// Original Traffic Source (coarse but ~100% populated) so attribution works even
+// when reps haven't tagged. Returns { source, auto } where auto=true means the
+// value came from the automatic fallback, not a human tag.
+export function leadSourceOf(props) {
+  const manual = props.true_lead_source?.trim();
+  if (manual) return { source: manual, auto: false };
+  const raw = props.hs_analytics_source?.trim();
+  if (raw) return { source: HS_SOURCE_LABELS[raw] || raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()), auto: true };
+  return { source: 'Unknown', auto: true };
+}
+
 // Fetch EVERY deal that belongs to the given pipeline(s), with NO truncation.
 //
 // We page through the regular GET /deals endpoint (which has a far more generous

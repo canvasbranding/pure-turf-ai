@@ -1,7 +1,7 @@
 // Pure Turf AI — Dashboard Stats + Goals Data Function
 import {
   PIPELINE_2026_SALES, DEAL_STAGE_NAMES, DEAL_STAGES_WON, DEAL_STAGES_LOST, EARLY_STAGES,
-  OWNER_NAMES, CLOSE_RATE_EXCLUDED, REP_NOTES, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, fetchDealsInPipelines,
+  OWNER_NAMES, CLOSE_RATE_EXCLUDED, REP_NOTES, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, fetchDealsInPipelines, leadSourceOf,
 } from './_shared/crm.mjs';
 
 const WINDSOR_KEY   = process.env.WINDSOR_API_KEY;
@@ -18,7 +18,7 @@ async function fetchWindsor(datasource, from, to) {
 }
 
 async function fetchHubSpotDeals(date_from) {
-  const props = 'dealname,amount,dealstage,pipeline,closedate,createdate,hubspot_owner_id,true_lead_source';
+  const props = 'dealname,amount,dealstage,pipeline,closedate,createdate,hubspot_owner_id,true_lead_source,hs_analytics_source';
 
   // Fetch pipeline stage definitions in parallel
   const stageMapPromise = fetch(`https://api.hubapi.com/crm/v3/pipelines/deals/${PIPELINE_2026_SALES}`, {
@@ -127,28 +127,36 @@ async function fetchHubSpotDeals(date_from) {
       created: d.properties.createdate?.slice(0, 10),
     }));
 
-  // Lead source attribution — leads created this period grouped by True Lead Source.
-  // Blank/unset values surface as "Unassigned" so the tagging gap stays visible.
+  // Lead source attribution for leads created this period. Blends the human-tagged
+  // True Lead Source (granular) with HubSpot's auto-captured Original Traffic Source
+  // (fills the gaps), so attribution is near-complete instead of mostly "Unassigned".
   const newLeadDeals = deals.filter(d => d.properties.createdate >= date_from);
   const bySource = {};
+  let manualTagged = 0, attributed = 0;
   newLeadDeals.forEach(d => {
-    const src = d.properties.true_lead_source?.trim() || 'Unassigned';
-    bySource[src] = (bySource[src] || 0) + 1;
+    const { source, auto } = leadSourceOf(d.properties);
+    if (!auto) manualTagged++;
+    if (source !== 'Unknown') attributed++;
+    if (!bySource[source]) bySource[source] = { count: 0, autoCount: 0 };
+    bySource[source].count++;
+    if (auto) bySource[source].autoCount++;
   });
   const leadSources = Object.entries(bySource)
-    .map(([source, count]) => ({
+    .map(([source, s]) => ({
       source,
-      count,
-      pct: newLeadDeals.length ? Math.round((count / newLeadDeals.length) * 100) : 0,
-      unassigned: source === 'Unassigned',
+      count: s.count,
+      pct: newLeadDeals.length ? Math.round((s.count / newLeadDeals.length) * 100) : 0,
+      autoOnly: s.autoCount === s.count, // no human tag in this bucket — auto-attributed
+      unknown: source === 'Unknown',
     }))
     .sort((a, b) => {
-      if (a.unassigned !== b.unassigned) return a.unassigned ? 1 : -1; // Unassigned last
+      if (a.unknown !== b.unknown) return a.unknown ? 1 : -1; // Unknown last
       return b.count - a.count;
     });
-  const taggedLeads = newLeadDeals.length - (bySource['Unassigned'] || 0);
+  const taggedLeads = manualTagged;             // leads a rep hand-tagged
+  const attributedLeads = attributed;           // leads with ANY source (manual or auto)
 
-  return { total: totalDeals, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads };
+  return { total: totalDeals, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads, attributedLeads };
 }
 
 // In-memory result cache. Netlify reuses warm function instances, so this persists
@@ -293,7 +301,7 @@ export const handler = async (event) => {
   if (hubspotResult.status === 'fulfilled') {
     const h = hubspotResult.value;
     stats.pipeline = { total: h.total, sub: `deals · ${new Date().getFullYear()}`, dir: '' };
-    stats.hubspot  = { newLeads: h.newLeads, revenue: h.revenue, closeRate: h.closeRate, wonCount: h.wonCount, lostCount: h.lostCount, stageBreakdown: h.stageBreakdown, repLeaderboard: h.repLeaderboard, recentDeals: h.recentDeals, leadSources: h.leadSources, taggedLeads: h.taggedLeads };
+    stats.hubspot  = { newLeads: h.newLeads, revenue: h.revenue, closeRate: h.closeRate, wonCount: h.wonCount, lostCount: h.lostCount, stageBreakdown: h.stageBreakdown, repLeaderboard: h.repLeaderboard, recentDeals: h.recentDeals, leadSources: h.leadSources, taggedLeads: h.taggedLeads, attributedLeads: h.attributedLeads };
   } else { stats.errors.hubspot = hubspotResult.reason?.message; }
 
   const googleSpend = stats.google?.spend || 0;
