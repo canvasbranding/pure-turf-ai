@@ -354,7 +354,7 @@ function KPIsSection({ liveStats, statsLoading, rangeLabel, sendMessage }) {
               return (
                 <div key={rep.name} className="kpi-reason-row" style={{cursor:'pointer'}}
                   onClick={() => sendMessage(`How is ${rep.name.split(' ')[0]} performing? Leads, close rate, and pipeline status.`)}>
-                  <div className="kpi-reason-name">{rep.name}</div>
+                  <div className="kpi-reason-name">{rep.name}{rep.note && <span className="rep-tag">{rep.note}</span>}</div>
                   <div className="kpi-reason-bar-wrap">
                     <div className="kpi-reason-bar" style={{width:`${pct}%`, background: pct >= 70 ? 'var(--green)' : pct >= 50 ? '#B8963E' : 'var(--red)'}}/>
                   </div>
@@ -817,7 +817,7 @@ function PipelineView({ liveStats, statsLoading, dateRange, sendMessage }) {
             </div>
             {h.repLeaderboard.filter(r => !r.excluded).map(rep => (
               <div key={rep.name} className="dv-table-row" onClick={() => sendMessage(`How is ${rep.name.split(' ')[0]} performing in the pipeline this period?`)}>
-                <div className="dv-col-main dv-rep-name">{rep.name}</div>
+                <div className="dv-col-main dv-rep-name">{rep.name}{rep.note && <span className="rep-tag">{rep.note}</span>}</div>
                 <div className="dv-col-num">{rep.leads}</div>
                 <div className="dv-col-num dv-won-num">{rep.won}</div>
                 <div className="dv-col-num">{rep.open}</div>

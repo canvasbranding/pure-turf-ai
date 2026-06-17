@@ -32,9 +32,11 @@ export const OWNER_NAMES = {
 };
 
 // Reps excluded from the aggregate close rate (still shown individually, flagged).
-export const CLOSE_RATE_EXCLUDED = {
-  '81693514': 'Sales manager',    // Kurt Dryden
-  '81719004': 'Commercial sales', // Wyatt Raines
+export const CLOSE_RATE_EXCLUDED = {};
+
+// Notes/badges shown next to a rep's name (does NOT exclude them from anything).
+export const REP_NOTES = {
+  '81719004': 'Commercial', // Wyatt Raines — commercial sales, not residential
 };
 
 // Non-sales staff — hidden entirely from the rep leaderboard.
@@ -43,59 +45,41 @@ export const NON_SALES_STAFF = new Set([
   '82036368', // Ashley Thomas (admin)
   '83335372', // Nicole McCutcheon (admin)
   '82036049', // Stuart Chandler (CSM)
+  '81693514', // Kurt Dryden (VP Finance / sales manager — not a residential rep)
 ]);
 
 // Campaign name fragments excluded from ad totals (mosquito line of business).
 export const EXCLUDED_CAMPAIGNS = ['mosquito', 'pmax - mosquito', 'pmax mosquito'];
 
-// Fetch EVERY deal in the given pipeline(s) via HubSpot's Search API.
-// Filtering happens server-side, so we only pull the pipelines we want and never
-// truncate them — unlike the old "GET all deals, then filter" approach, which
-// silently dropped any deal past the page cap (and HubSpot returns oldest-first,
-// so the dropped deals were the most recent — exactly the ones that matter).
+// Fetch EVERY deal that belongs to the given pipeline(s), with NO truncation.
 //
-// The first page reports the true `total`; remaining pages are fetched in
-// parallel (bounded concurrency) using offset-based `after`, so several thousand
-// deals come back in a couple of seconds instead of ~40 slow sequential round
-// trips that would risk the function timeout. Returns { rows, total }.
-export async function searchDeals(token, { pipelines, properties, sort = 'createdate', timeoutMs = 9000, concurrency = 4 }) {
-  const pids = Array.isArray(pipelines) ? pipelines : [pipelines];
-  const filters = pids.length === 1
-    ? [{ propertyName: 'pipeline', operator: 'EQ', value: pids[0] }]
-    : [{ propertyName: 'pipeline', operator: 'IN', values: pids }];
-  const props = Array.isArray(properties) ? properties : properties.split(',');
-
-  const page = async (after) => {
-    const res = await fetch('https://api.hubapi.com/crm/v3/objects/deals/search', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+// We page through the regular GET /deals endpoint (which has a far more generous
+// rate limit than the Search endpoint's ~4 req/s cap) until HubSpot stops
+// returning a `next` cursor, then filter to the pipelines we care about. The old
+// bug was a hard 30-page cap that dropped every deal past 3,000 — and since
+// HubSpot returns oldest-first, the dropped deals were the most recent ones
+// (this month's leads, recent closes). Removing the cap is the fix.
+//
+// Returns { rows, total } where total is the exact count in the target pipeline(s).
+export async function fetchDealsInPipelines(token, pipelineIds, properties, { timeoutMs = 9000, maxPages = 120 } = {}) {
+  const ids = new Set(Array.isArray(pipelineIds) ? pipelineIds : [pipelineIds]);
+  const props = Array.isArray(properties) ? properties.join(',') : properties;
+  let all = [];
+  let after = undefined;
+  for (let p = 0; p < maxPages; p++) {
+    const url = `https://api.hubapi.com/crm/v3/objects/deals?limit=100&archived=false&properties=${props}${after ? `&after=${after}` : ''}`;
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` },
       signal: AbortSignal.timeout(timeoutMs),
-      body: JSON.stringify({
-        filterGroups: [{ filters }],
-        properties: props,
-        sorts: [{ propertyName: sort, direction: 'DESCENDING' }],
-        limit: 100,
-        ...(after ? { after: String(after) } : {}),
-      }),
     });
-    if (!res.ok) throw new Error(`HubSpot deal search ${res.status}: ${await res.text()}`);
-    return res.json();
-  };
-
-  const first = await page(0);
-  const total = first.total || 0;
-  const rows = [...(first.results || [])];
-
-  // Remaining offsets (HubSpot caps search paging at 10,000 results).
-  const offsets = [];
-  for (let o = 100; o < total && o < 10000; o += 100) offsets.push(o);
-
-  for (let i = 0; i < offsets.length; i += concurrency) {
-    const batch = offsets.slice(i, i + concurrency);
-    const pages = await Promise.all(batch.map(page));
-    pages.forEach(p => rows.push(...(p.results || [])));
+    if (!res.ok) throw new Error(`HubSpot deals ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    all = all.concat(data.results || []);
+    if (data.paging?.next?.after) after = data.paging.next.after;
+    else break;
   }
-  return { rows, total };
+  const rows = all.filter(d => ids.has(d.properties.pipeline));
+  return { rows, total: rows.length };
 }
 
 // Resolve a date range key ('7d' | '30d' | '90d' | 'ytd' | 'mtd'/default) to from/to dates.

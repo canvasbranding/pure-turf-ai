@@ -1,7 +1,7 @@
 // Pure Turf AI — Netlify Serverless Function
 import Anthropic from '@anthropic-ai/sdk';
 import {
-  DEAL_STAGE_NAMES, OWNER_NAMES, getDateRange, searchDeals,
+  DEAL_STAGE_NAMES, OWNER_NAMES, getDateRange, fetchDealsInPipelines,
   PIPELINE_2026_SALES, PIPELINE_2026_COMMERCIAL, ACTIVE_PIPELINES,
 } from './_shared/crm.mjs';
 
@@ -100,8 +100,8 @@ function resolvePipelines(pipeline_name) {
 async function getPipelineDeals(pipeline_name = null, limit = 100, owner_name = null) {
   const props = 'dealname,amount,dealstage,pipeline,hubspot_owner_id,closedate,createdate,true_lead_source';
 
-  // Fetch the COMPLETE set of deals for the requested pipeline(s), server-side filtered.
-  const { rows: allResults } = await searchDeals(HUBSPOT_TOKEN, { pipelines: resolvePipelines(pipeline_name), properties: props });
+  // Fetch the COMPLETE set of deals for the requested pipeline(s).
+  const { rows: allResults } = await fetchDealsInPipelines(HUBSPOT_TOKEN, resolvePipelines(pipeline_name), props);
   let results = allResults;
 
   // Filter by owner name
@@ -224,8 +224,8 @@ Rules:
 Company context:
 - Pure Turf LLC, Middle Tennessee. Services: lawn care, mosquito control.
 - Google campaigns: PMax Lawn, PMax Mosquito, Search Brand, Search Lawn. Meta: awareness + retargeting.
-- HubSpot pipelines: "2026 Sales" and "2026 Commercial". The dashboard tracks the 2026 Sales pipeline; close rate excludes the sales manager and commercial rep.
-- Reps: Kaley Brownlee, Chris Kleeman, Daniel Anderson (sales); Wyatt Raines (commercial); Kurt Dryden (sales manager). Owner: David Patton.`;
+- HubSpot pipelines: "2026 Sales" and "2026 Commercial". The dashboard tracks the 2026 Sales pipeline.
+- Reps on the leaderboard: Kaley Brownlee, Chris Kleeman, Daniel Anderson (residential sales); Wyatt Raines (commercial sales, not residential). Kurt Dryden (VP Finance) is not shown as a sales rep. Owner: David Patton.`;
 }
 
 // ── HANDLER (streaming) ───────────────────────────────────────────────────

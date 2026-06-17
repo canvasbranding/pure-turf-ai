@@ -966,6 +966,7 @@ html[data-theme="dark"] .dv-kpi-card { background:rgba(255,255,255,0.04); }
 /* Section label */
 .dv-section-label { font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:600; margin-bottom:9px; }
 .dv-section-note { float:right; letter-spacing:0; text-transform:none; color:var(--text-3); font-weight:500; opacity:0.8; }
+.rep-tag { display:inline-block; margin-left:7px; padding:1px 6px; border-radius:5px; font-size:9px; font-weight:600; letter-spacing:0.03em; text-transform:uppercase; vertical-align:middle; color:var(--text-3); background:rgba(127,127,127,0.16); }
 
 /* Data-health strip — surfaces failed/stale data sources */
 .data-health { font-size:11px; line-height:1.4; padding:7px 12px; border-radius:9px; margin:0 0 10px; display:flex; align-items:center; gap:7px; }
