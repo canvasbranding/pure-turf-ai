@@ -1724,17 +1724,45 @@ function SearchVisibilityView({ sendMessage }) {
 
       {!loading && (
         <>
-          {/* Local map rankings — the hero for a local business */}
-          <div className="dv-section-label">Local Map Rankings</div>
-          <div className="sv-hero">
-            <div>
-              <div className="sv-hero-val">{local?.avgPosition ?? '–'}{delta != null && delta !== 0 && (
-                <span className={`sv-delta ${delta > 0 ? 'up' : 'dn'}`}>{delta > 0 ? '▲' : '▼'} {Math.abs(delta)}</span>
-              )}</div>
-              <div className="sv-hero-lbl">avg map position{local?.prevPosition != null ? ` · was ${local.prevPosition}` : ''}</div>
+          {/* Wins heroes — reputation + local map rank */}
+          <div className="sv-heroes">
+            {data?.reviews && (
+              <div className="sv-win">
+                <div className="sv-win-val">{data.reviews.avgRating}<span className="sv-win-star">★</span></div>
+                <div className="sv-win-lbl">{data.reviews.total.toLocaleString()} reviews · {data.reviews.fiveStar.toLocaleString()} five-star</div>
+              </div>
+            )}
+            <div className="sv-win">
+              <div className="sv-win-val">#{local?.avgPosition ?? '–'}{delta > 0 && <span className="sv-delta up"> ▲{delta}</span>}</div>
+              <div className="sv-win-lbl">avg map rank{local?.prevPosition != null ? ` · up from #${local.prevPosition}` : ''}</div>
             </div>
-            <div className="sv-hero-side">{local?.trackedKeywords ?? '–'} keywords tracked</div>
           </div>
+
+          {/* Keyword wins */}
+          {data?.keywordWins && (() => { const kw = data.keywordWins; return (
+            <>
+              <div className="dv-section-label" style={{marginTop:18}}>
+                Keyword Rankings{kw.improved != null && <span className="dv-section-note" style={{color:'#10B981',opacity:1}}>▲ {kw.improved} improved this period</span>}
+              </div>
+              <div className="dv-kpi-row">
+                {[
+                  { label:'Ranking #1', val: kw.atTop1 },
+                  { label:'In Top 3',   val: kw.top3 },
+                  { label:'On Page 1',  val: kw.page1 },
+                  { label:'Tracked',    val: kw.ranked },
+                ].map(k => (
+                  <div key={k.label} className="dv-kpi-card"><div className="dv-kpi-label">{k.label}</div><div className="dv-kpi-val">{k.val}</div></div>
+                ))}
+              </div>
+              {data.visibilityTrend?.length > 1 && (() => { const mx = Math.max(...data.visibilityTrend, 0.01); return (
+                <div className="dv-sparkbar-wrap" style={{marginBottom:18}}>
+                  {data.visibilityTrend.map((v, i) => (
+                    <div key={i} className="dv-sparkbar-col"><div className="dv-sparkbar" style={{height:`${Math.max(8, Math.round((v/mx)*100))}%`}}/></div>
+                  ))}
+                </div>
+              ); })()}
+            </>
+          ); })()}
 
           {/* GBP locations */}
           {data?.gbpLocations?.length > 0 && (

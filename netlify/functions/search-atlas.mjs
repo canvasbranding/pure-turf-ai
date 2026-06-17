@@ -90,16 +90,12 @@ export default async (req) => {
     out.visibilityTrend = (rt.search_visibility_report || []).slice(0, 21).map(p => p.sv).reverse();
   } else if (rank.status !== 200) out.errors.local = `rank ${rank.status}`;
 
-  // ── GBP reviews (reputation) ────────────────────────────────
+  // ── GBP reviews (reputation) — array of { star_rating, count } ──────────
   if (reviews.status === 200) {
-    const b = reviews.body?.data?.attributes || reviews.body?.data || reviews.body || {};
-    const counts = b.star_rating_count || b.counts || b;
-    const stars = { 5: +(counts.five_star ?? counts['5'] ?? counts.FIVE ?? 0) || 0, 4: +(counts.four_star ?? counts['4'] ?? counts.FOUR ?? 0) || 0, 3: +(counts.three_star ?? counts['3'] ?? counts.THREE ?? 0) || 0, 2: +(counts.two_star ?? counts['2'] ?? counts.TWO ?? 0) || 0, 1: +(counts.one_star ?? counts['1'] ?? counts.ONE ?? 0) || 0 };
-    const total = stars[5] + stars[4] + stars[3] + stars[2] + stars[1];
-    if (total > 0) {
-      const avg = (stars[5]*5 + stars[4]*4 + stars[3]*3 + stars[2]*2 + stars[1]*1) / total;
-      out.reviews = { total, avgRating: Math.round(avg * 10) / 10, fiveStar: stars[5] };
-    }
+    const arr = Array.isArray(reviews.body) ? reviews.body : (reviews.body?.data || []);
+    let total = 0, weighted = 0, fiveStar = 0;
+    arr.forEach(r => { const s = +r.star_rating || 0, c = +r.count || 0; total += c; weighted += s * c; if (s === 5) fiveStar = c; });
+    if (total > 0) out.reviews = { total, avgRating: Math.round((weighted / total) * 10) / 10, fiveStar };
   }
 
   // ── GBP locations (JSON:API) ────────────────────────────────
@@ -110,12 +106,6 @@ export default async (req) => {
     });
   } else out.errors.gbp = `gbp ${gbp.status}`;
 
-  if (new URL(req.url).searchParams.get('debug') === '1') {
-    return new Response(JSON.stringify({
-      keywordWins: out.keywordWins, visibilityTrend: out.visibilityTrend, reviews: out.reviews,
-      reviews_status: reviews.status, reviews_raw: typeof reviews.body === 'object' ? JSON.stringify(reviews.body).slice(0, 500) : String(reviews.body).slice(0, 300),
-    }, null, 0), { status: 200, headers: { ...CORS, 'Cache-Control':'no-store' } });
-  }
 
   return new Response(JSON.stringify(out), { status: 200, headers: { ...CORS, 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=3600, stale-while-revalidate=86400' } });
 };

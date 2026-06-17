@@ -83,9 +83,12 @@ function computeDealMetrics(deals, date_from, getStageName) {
   const closeRate = (coreWon + coreLost) > 0
     ? Math.round((coreWon / (coreWon + coreLost)) * 100) : null;
 
-  // Per-stage breakdown with resolved names
+  // Per-stage breakdown with resolved names. Open stages = current pipeline (point in
+  // time). Closed Won/Lost are PERIOD-FILTERED to deals closed in the range — otherwise
+  // an MTD view would show all-time closed-won (e.g. 2,500+ / $3.8M), which is wrong.
   const byStage = {};
   deals.forEach(d => {
+    if ((isWon(d) || isLost(d)) && !(d.properties.closedate >= date_from)) return;
     const stageName = getStageName(d.properties.dealstage);
     if (!byStage[stageName]) byStage[stageName] = { count: 0, value: 0 };
     byStage[stageName].count++;

@@ -334,6 +334,12 @@ html[data-theme="dark"] .snav-btn.active {
 .sv-delta { font-size:13px; font-weight:700; }
 .sv-delta.up { color:#10B981; }
 .sv-delta.dn { color:#EF4444; }
+/* Wins heroes */
+.sv-heroes { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:4px; }
+.sv-win { padding:16px 18px; border-radius:12px; background:#111316; border:1px solid rgba(255,255,255,0.07); }
+.sv-win-val { font-size:34px; font-weight:800; color:#EEECEA; line-height:1; }
+.sv-win-star { color:#F5B301; font-size:26px; margin-left:2px; }
+.sv-win-lbl { font-size:11px; color:rgba(238,236,234,0.5); margin-top:8px; }
 
 /* Finance income statement */
 .fin-statement { display:flex; flex-direction:column; }
@@ -975,7 +981,7 @@ html[data-theme="dark"] .metric-hero .mc-goal-ctx { opacity:0.6; }
 
 /* KPI cards row */
 .dv-kpi-row {
-  display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin-bottom:20px;
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(118px, 1fr)); gap:9px; margin-bottom:20px;
 }
 .dv-kpi-row-2 { grid-template-columns:repeat(2,1fr); }
 .dv-kpi-card {
@@ -1003,7 +1009,7 @@ html[data-theme="dark"] .dv-kpi-card { background:rgba(255,255,255,0.04); }
 /* Query-log / search-activity view (David-only) */
 .ql-export { font-size:11px; font-weight:600; color:var(--accent,#5E6AD2); background:var(--accent-dim,rgba(94,106,210,0.12)); border:none; padding:4px 10px; border-radius:6px; cursor:pointer; }
 .ql-export:hover { filter:brightness(1.08); }
-.ql-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
+.ql-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-bottom:16px; }
 .ql-stat { background:var(--surface-2,rgba(127,127,127,0.08)); border-radius:9px; padding:10px 12px; }
 .ql-stat-val { font-size:20px; font-weight:700; color:var(--text-1); line-height:1.1; }
 .ql-stat-lbl { font-size:10px; color:var(--text-3); margin-top:2px; }
