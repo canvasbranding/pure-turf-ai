@@ -46,13 +46,6 @@ export default async (req) => {
     sa(`${HOST.gbp}/api/gbp/v1/reviews/star-rating-count/`, 'application/json'),
   ]);
 
-  if (new URL(req.url).searchParams.get('probe') === 'kw') {
-    const eq = `&period1_start=${ago(35)}&period1_end=${ago(8)}&period2_start=${ago(63)}&period2_end=${ago(36)}`;
-    const a = await sa(`${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}${cc}${eq}&page_size=15&ordering=position`);
-    const a2 = await sa(`${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}${eq}&page_size=15`);
-    return new Response(JSON.stringify({ withCC: a.status, withCC_s: JSON.stringify(a.body).slice(0,500), noCC: a2.status, noCC_s: JSON.stringify(a2.body).slice(0,700) }), { status: 200, headers: { ...CORS, 'Cache-Control':'no-store' } });
-  }
-
   const out = { fetchedAt: new Date().toISOString(), errors: {} };
 
   // ── GSC website search traffic (United States) ──────────────
@@ -93,14 +86,10 @@ export default async (req) => {
     const ranked = page1 + (cur.serp_11_20 || 0) + (cur.serp_21_50 || 0) + (cur.serp_51_100 || 0);
     const ud = rt.keywords_up_down_report || {};
     out.keywordWins = { atTop1: at1, top3, page1, ranked, improved: ud.keywords_up ?? null, declined: ud.keywords_down ?? null };
-    // The actual terms we rank best for — the showcase list.
-    const tk = Array.isArray(rt.tracked_keywords) ? rt.tracked_keywords : [];
-    out.topKeywords = tk
-      .map(k => ({ term: k.keyword || k.term, position: k.position ?? k.rank ?? k.current_position, location: (k.location || '').split(',')[0] }))
-      .filter(k => k.term && k.position != null && k.position > 0)
-      .sort((a, b) => a.position - b.position)
-      .slice(0, 12);
-    out._tkSample = tk[0] || null;
+    // Breadth of terms we track/rank for (strings; the REST API doesn't expose per-term
+    // positions here, so we show the count + a sample, paired with the win counts above).
+    const tk = Array.isArray(rt.tracked_keywords) ? rt.tracked_keywords.filter(k => typeof k === 'string') : [];
+    out.trackedTerms = { count: tk.length, sample: tk.slice(0, 14) };
     // Search-visibility trend (oldest→newest for a sparkline).
     out.visibilityTrend = (rt.search_visibility_report || []).slice(0, 21).map(p => p.sv).reverse();
   } else if (rank.status !== 200) out.errors.local = `rank ${rank.status}`;
