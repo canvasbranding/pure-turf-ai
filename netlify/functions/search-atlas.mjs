@@ -33,23 +33,34 @@ export default async (req) => {
   if (new URL(req.url).searchParams.get('probe') === 'gbpperf') {
     const locsRes = await sa(`${HOST.gbp}/api/gbp/v2/locations/`, 'application/vnd.api+json');
     const locs = (locsRes.body?.data || []).map(l => ({ id: l.id, name: l.attributes?.business_name || l.attributes?.title }));
-    const id = locs[0]?.id;
+    const id = locs[locs.length - 1]?.id; // 87554 (Atlas Dr, has data)
     const qs = 'start_date=2026-06-01&end_date=2026-06-17';
+    const JAPI = 'application/vnd.api+json';
     const candidates = [
-      `${HOST.gbp}/api/gbp/v2/locations/${id}/performance/?${qs}`,
-      `${HOST.gbp}/api/gbp/v2/locations/${id}/metrics/?${qs}`,
-      `${HOST.gbp}/api/gbp/v2/locations/${id}/insights/?${qs}`,
-      `${HOST.gbp}/api/gbp/v2/locations/${id}/performance/?view=performance&${qs}`,
-      `${HOST.gbp}/api/gbp/v1/locations/${id}/performance/?${qs}`,
-      `${HOST.gbp}/api/gbp/v2/performance/?location_id=${id}&${qs}`,
-      `${HOST.gbp}/api/gbp/v2/locations/${id}/`,
+      [`${HOST.gbp}/api/gbp/v2/locations/${id}/`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/locations/${id}/performance/?${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/locations/${id}/daily-metrics/?${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/locations/${id}/google-metrics/?${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/locations/${id}/performance-metrics/?${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/locations/${id}/analytics/?${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/locations/${id}/insights/?${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/locations/${id}/metrics/?${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/performance/?location=${id}&${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/location-performance/?location=${id}&${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v3/locations/${id}/performance/?${qs}`, JAPI],
+      [`https://api.searchatlas.com/api/gbp/v2/locations/${id}/performance/?${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/locations/${id}/multi-daily-metrics/?${qs}`, JAPI],
+      [`${HOST.gbp}/api/gbp/v2/locations/${id}/performance-report/?${qs}`, JAPI],
     ];
     const results = [];
-    for (const url of candidates) {
-      const r = await sa(url, 'application/json');
-      results.push({ url: url.replace(HOST.gbp, ''), status: r.status, keys: (r.body && typeof r.body === 'object') ? Object.keys(r.body).slice(0, 25) : String(r.body).slice(0, 160) });
+    for (const [url, acc] of candidates) {
+      const r = await sa(url, acc);
+      let info;
+      if (r.body && typeof r.body === 'object') info = JSON.stringify(r.body).slice(0, 280);
+      else info = String(r.body).slice(0, 90);
+      results.push({ url: url.replace(HOST.gbp, '').replace('https://api.searchatlas.com', '[api]'), status: r.status, body: info });
     }
-    return new Response(JSON.stringify({ locations: locs, probed: results }, null, 2), { status: 200, headers: CORS });
+    return new Response(JSON.stringify({ ids: locs.map(l=>l.id), probed: results }, null, 2), { status: 200, headers: CORS });
   }
 
   const today = new Date();
