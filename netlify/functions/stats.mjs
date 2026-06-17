@@ -361,7 +361,7 @@ async function fetchRGServices(hubspotToken, date_from) {
   const STATUS_CANCEL_PENDING = '6';
   const STATUS_ACTIVE        = '9';
 
-  const props = 'program_status,program_code,cancel_reason,createdate,hs_lastmodifieddate,sold_date,sold_by_1,name';
+  const props = 'program_status,program_code,cancel_reason,createdate,hs_lastmodifieddate,sold_date,sold_by_1,name,invoice_number,invoice_no_,program_id,real_green_program_id,rg_round_id,round_rg_id,route';
   let allServices = [];
   let after = undefined;
 
@@ -447,6 +447,17 @@ async function fetchRGServices(hubspotToken, date_from) {
   const estActiveCustomers = new Set(active.map(custKey).filter(Boolean)).size;
   const estNewCustomers    = new Set(newCustomers.map(custKey).filter(Boolean)).size;
 
+  // Diagnostic: which field is customer-level (distinct ≈ # customers, not # programs ~4240)?
+  const distinct = (f) => new Set(active.map(s => p(s)[f]).filter(v => v != null && v !== '')).size;
+  const _custDiag = {
+    activePrograms: active.length,
+    invoice_number: distinct('invoice_number'), invoice_no_: distinct('invoice_no_'),
+    program_id: distinct('program_id'), rg_program_id: distinct('real_green_program_id'),
+    rg_round_id: distinct('rg_round_id'), round_rg_id: distinct('round_rg_id'),
+    route: distinct('route'), nameSuffix: estActiveCustomers,
+    name_plus_route: new Set(active.map(s => `${custKey(s)}|${p(s).route || ''}`).filter(x => x !== '|')).size,
+  };
+
   // Cancel reasons breakdown (resolved to labels)
   const cancelReasons = {};
   newCancels.forEach(s => {
@@ -468,6 +479,7 @@ async function fetchRGServices(hubspotToken, date_from) {
     programsByRep,
     estActiveCustomers,
     estNewCustomers,
+    _custDiag,
     cancelReasons:    cancelReasonsList,
   };
 }
