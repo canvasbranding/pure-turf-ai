@@ -1607,6 +1607,114 @@ function ScorecardView({ liveStats, dateRange, sendMessage }) {
   );
 }
 
+// ── SEARCH & VISIBILITY (SEO / Local / AEO via Search Atlas) ────────────
+function SearchVisibilityView({ sendMessage }) {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch('/.netlify/functions/search-atlas')
+      .then(r => r.json()).then(d => { if (!cancelled) setData(d); })
+      .catch(() => {}).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const g = data?.gsc, local = data?.local;
+  const fmtN = n => (n ?? 0).toLocaleString();
+  const delta = local?.delta;
+  const updated = data?.fetchedAt ? relTime(data.fetchedAt) : null;
+
+  return (
+    <div className="data-view-scroll">
+      <div className="dv-header">
+        <div>
+          <div className="dv-eyebrow">Search Atlas{updated ? ` · updated ${updated}` : ''}</div>
+          <h2 className="dv-title">Search & Visibility</h2>
+        </div>
+      </div>
+
+      {loading && <div className="dv-loading-rows">{[1,2,3].map(i=><div key={i} className="dv-row-skel"/>)}</div>}
+
+      {!loading && (
+        <>
+          {/* Local map rankings — the hero for a local business */}
+          <div className="dv-section-label">Local Map Rankings</div>
+          <div className="sv-hero">
+            <div>
+              <div className="sv-hero-val">{local?.avgPosition ?? '–'}{delta != null && delta !== 0 && (
+                <span className={`sv-delta ${delta > 0 ? 'up' : 'dn'}`}>{delta > 0 ? '▲' : '▼'} {Math.abs(delta)}</span>
+              )}</div>
+              <div className="sv-hero-lbl">avg map position{local?.prevPosition != null ? ` · was ${local.prevPosition}` : ''}</div>
+            </div>
+            <div className="sv-hero-side">{local?.trackedKeywords ?? '–'} keywords tracked</div>
+          </div>
+
+          {/* GBP locations */}
+          {data?.gbpLocations?.length > 0 && (
+            <>
+              <div className="dv-section-label" style={{marginTop:16}}>Locations ({data.gbpLocations.length})</div>
+              <div className="dv-deal-list">
+                {data.gbpLocations.map(l => (
+                  <div key={l.id} className="dv-deal-row" onClick={() => sendMessage(`How is the ${l.name} (${l.address}) location performing in local search?`)}>
+                    <div className="dv-deal-info">
+                      <div className="dv-deal-name">{l.name}</div>
+                      <div className="dv-deal-meta">{l.address}</div>
+                    </div>
+                    <div className="dv-deal-right">
+                      <div className={`dv-stage-chip${l.verified ? ' dv-chip-won' : ''}`}>{l.verified ? 'Verified' : 'Unverified'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Website search traffic (GSC) */}
+          <div className="dv-section-label" style={{marginTop:18}}>Website Search · last {g?.periodDays || 90} days</div>
+          <div className="dv-kpi-row">
+            {[
+              { label:'Clicks',      val: g ? fmtN(g.clicks) : '–' },
+              { label:'Impressions', val: g ? fmtN(g.impressions) : '–' },
+              { label:'CTR',         val: g ? `${g.ctr}%` : '–' },
+              { label:'Avg Position',val: g ? g.position : '–' },
+            ].map(k => (
+              <div key={k.label} className="dv-kpi-card">
+                <div className="dv-kpi-label">{k.label}</div>
+                <div className="dv-kpi-val">{k.val}</div>
+              </div>
+            ))}
+          </div>
+
+          {data?.gscTopKeywords?.length > 0 && (
+            <>
+              <div className="dv-section-label" style={{marginTop:16}}>Top Search Terms</div>
+              <div className="dv-table">
+                {data.gscTopKeywords.map((k, i) => (
+                  <div key={i} className="dv-table-row">
+                    <div className="dv-col-main">{k.term}</div>
+                    <div className="dv-col-num">{fmtN(k.clicks)} clk</div>
+                    <div className="dv-col-num">#{k.position}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {Object.keys(data?.errors || {}).length > 0 && (
+            <div className="data-health data-health-ok" style={{marginTop:14}}>Some Search Atlas data couldn’t load: {Object.keys(data.errors).join(', ')}.</div>
+          )}
+        </>
+      )}
+
+      <button className="dv-ai-btn" onClick={() => sendMessage('Give me a full SEO and local search summary — how are we ranking, where are we gaining or losing, and what should we focus on?')}>
+        <span>Ask AI for an SEO summary</span>
+        <Icon name="arrowR" size={13}/>
+      </button>
+      <div style={{height:32}}/>
+    </div>
+  );
+}
+
 // ── MOBILE DETECTION ───────────────────────────────────────────────────
 function useMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth <= bp);
@@ -2302,6 +2410,7 @@ function AppInner() {
                 ...(perms.gbp      ? [{ key:'gbp',   icon:'gbp',      label:'GBP'        }] : []),
                 ...(perms.pipeline ? [{ key:'pipe',  icon:'pipeline', label:'Pipeline'   }] : []),
                 ...(perms.teamGoals ? [{ key:'score', icon:'briefing', label:'Scorecard' }] : []),
+                ...(perms.teamGoals ? [{ key:'search', icon:'chart', label:'Search & Visibility' }] : []),
               ].map(item => (
                 <button key={item.key}
                   className={`snav-btn${
@@ -2310,7 +2419,8 @@ function AppInner() {
                     (mainView==='google-ads'&& item.key==='gads') ||
                     (mainView==='gbp'       && item.key==='gbp') ||
                     (mainView==='pipeline'  && item.key==='pipe') ||
-                    (mainView==='scorecard' && item.key==='score') ? ' active' : ''}`}
+                    (mainView==='scorecard' && item.key==='score') ||
+                    (mainView==='search'    && item.key==='search') ? ' active' : ''}`}
                   title={item.label}
                   onClick={() => {
                     if (item.key === 'home')  { setMobileTab('dashboard'); setMainView('dashboard'); }
@@ -2319,6 +2429,7 @@ function AppInner() {
                     else if (item.key === 'gbp')   { setMobileTab('dashboard'); setMainView('gbp'); }
                     else if (item.key === 'pipe')  { setMobileTab('pipeline'); setMainView('pipeline'); }
                     else if (item.key === 'score') { setMobileTab('dashboard'); setMainView('scorecard'); }
+                    else if (item.key === 'search'){ setMobileTab('dashboard'); setMainView('search'); }
                   }}>
                   <Icon name={item.icon} size={16}/>
                   {sidebarOpen && <span>{item.label}</span>}
@@ -2462,6 +2573,11 @@ function AppInner() {
                 {/* SCORECARD VIEW */}
                 <div className="goals-col" style={{display: mainView === 'scorecard' ? undefined : 'none'}}>
                   {mainView === 'scorecard' && <ScorecardView key={dateRange} liveStats={liveStats} dateRange={dateRange} sendMessage={sendMessage}/>}
+                </div>
+
+                {/* SEARCH & VISIBILITY VIEW */}
+                <div className="goals-col" style={{display: mainView === 'search' ? undefined : 'none'}}>
+                  {mainView === 'search' && <SearchVisibilityView sendMessage={sendMessage}/>}
                 </div>
 
               </div>{/* /left-col */}
