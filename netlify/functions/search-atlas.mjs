@@ -37,12 +37,13 @@ export default async (req) => {
   // GSC keyword/page endpoints compare two periods: last 28 days vs the prior 28.
   const periods = `&period1_start=${ago(28)}&period1_end=${iso(today)}&period2_start=${ago(56)}&period2_end=${ago(29)}`;
 
-  const [perf, keywords, pages, gbp, rank] = await Promise.all([
+  const [perf, keywords, pages, gbp, rank, reviews] = await Promise.all([
     sa(`${HOST.gsc}/search-console/api/v2/site-property-performance/?selected_property=${prop}${cc}`),
     sa(`${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}${cc}${periods}&page_size=10&order_by=-clicks`),
     sa(`${HOST.gsc}/search-console/api/v2/pages/?selected_property=${prop}${cc}${periods}&page_size=10&order_by=-clicks`),
     sa(`${HOST.gbp}/api/gbp/v2/locations/`, 'application/vnd.api+json'),
     sa(`${HOST.keyword}/api/v1/rank-tracker/`),
+    sa(`${HOST.gbp}/api/gbp/v1/reviews/star-rating-count/`, 'application/vnd.api+json'),
   ]);
 
   const out = { fetchedAt: new Date().toISOString(), errors: {} };
@@ -76,7 +77,30 @@ export default async (req) => {
       competitors: rt.competitors,
       locations: rt.locations,
     };
+    // Keyword wins (latest SERP snapshot) — the showcase numbers.
+    const so = (rt.serps_overview || []);
+    const cur = so[0] || {};
+    const at1 = cur.serp_1 || 0;
+    const top3 = at1 + (cur.serp_2_3 || 0);
+    const page1 = top3 + (cur.serp_4_10 || 0);
+    const ranked = page1 + (cur.serp_11_20 || 0) + (cur.serp_21_50 || 0) + (cur.serp_51_100 || 0);
+    const ud = rt.keywords_up_down_report || {};
+    out.keywordWins = { atTop1: at1, top3, page1, ranked, improved: ud.keywords_up ?? null, declined: ud.keywords_down ?? null };
+    // Search-visibility trend (oldest→newest for a sparkline).
+    out.visibilityTrend = (rt.search_visibility_report || []).slice(0, 21).map(p => p.sv).reverse();
   } else if (rank.status !== 200) out.errors.local = `rank ${rank.status}`;
+
+  // ── GBP reviews (reputation) ────────────────────────────────
+  if (reviews.status === 200) {
+    const b = reviews.body?.data?.attributes || reviews.body?.data || reviews.body || {};
+    const counts = b.star_rating_count || b.counts || b;
+    const stars = { 5: +(counts.five_star ?? counts['5'] ?? counts.FIVE ?? 0) || 0, 4: +(counts.four_star ?? counts['4'] ?? counts.FOUR ?? 0) || 0, 3: +(counts.three_star ?? counts['3'] ?? counts.THREE ?? 0) || 0, 2: +(counts.two_star ?? counts['2'] ?? counts.TWO ?? 0) || 0, 1: +(counts.one_star ?? counts['1'] ?? counts.ONE ?? 0) || 0 };
+    const total = stars[5] + stars[4] + stars[3] + stars[2] + stars[1];
+    if (total > 0) {
+      const avg = (stars[5]*5 + stars[4]*4 + stars[3]*3 + stars[2]*2 + stars[1]*1) / total;
+      out.reviews = { total, avgRating: Math.round(avg * 10) / 10, fiveStar: stars[5] };
+    }
+  }
 
   // ── GBP locations (JSON:API) ────────────────────────────────
   if (gbp.status === 200) {
@@ -87,16 +111,9 @@ export default async (req) => {
   } else out.errors.gbp = `gbp ${gbp.status}`;
 
   if (new URL(req.url).searchParams.get('debug') === '1') {
-    const rt0 = rows(rank)[0] || {};
     return new Response(JSON.stringify({
-      rt_keys: Object.keys(rt0),
-      serps_overview: rt0.serps_overview,
-      search_visibility_report: rt0.search_visibility_report,
-      keywords_up_down_report: rt0.keywords_up_down_report,
-      estimated_traffic_report: rt0.estimated_traffic_report,
-      competitors: rt0.competitors,
-      gbp_attr_keys: gbp.body?.data?.[0] ? Object.keys(gbp.body.data[0].attributes || {}) : null,
-      gbp_attr_sample: gbp.body?.data?.[0]?.attributes || null,
+      keywordWins: out.keywordWins, visibilityTrend: out.visibilityTrend, reviews: out.reviews,
+      reviews_status: reviews.status, reviews_raw: typeof reviews.body === 'object' ? JSON.stringify(reviews.body).slice(0, 500) : String(reviews.body).slice(0, 300),
     }, null, 0), { status: 200, headers: { ...CORS, 'Cache-Control':'no-store' } });
   }
 
