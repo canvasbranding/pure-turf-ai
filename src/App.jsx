@@ -1687,7 +1687,7 @@ function ScorecardView({ liveStats, dateRange, sendMessage }) {
         </div>
       )}
 
-      <div className="dv-table">
+      <div className="dv-table sc-rep-table">
         <div className="dv-table-hdr">
           <div className="dv-col-main">Rep</div>
           <div className="dv-col-num">Calls</div>

@@ -54,11 +54,13 @@ html[data-theme="dark"] {
 }
 
 html,body,#root {
-  height:100%; width:100%; overflow:hidden;
+  height:100%; width:100%; max-width:100%; overflow:hidden;
   background:var(--bg); font-family:var(--font);
   color:var(--text); -webkit-font-smoothing:antialiased;
   padding-top:env(safe-area-inset-top);
   transition:background 0.35s ease, color 0.35s ease;
+  /* Stop iOS Safari from auto-inflating text (a cause of "loads zoomed/off-screen"). */
+  -webkit-text-size-adjust:100%; text-size-adjust:100%;
 }
 
 /* ── ATMOSPHERE ──────────────────────────────────────────── */
@@ -327,9 +329,17 @@ html[data-theme="dark"] .snav-btn.active {
 .sc-activity-bar { height:3px; border-radius:2px; background:rgba(127,127,127,0.14); margin-top:5px; overflow:hidden; }
 .sc-activity-fill { height:100%; background:var(--accent,#5E6AD2); border-radius:2px; }
 .sc-note { font-size:11px; color:var(--text-3); margin:0 2px 10px; line-height:1.4; }
-.sc-prog-table { overflow-x:auto; }
+/* Wide rep tables scroll horizontally so columns never collapse/overlap on phones.
+   The min-width keeps every column at its natural size; the rep column stays readable. */
+.sc-prog-table { overflow-x:auto; -webkit-overflow-scrolling:touch; }
 .sc-prog-table .dv-col-num { width:44px; }
-.sc-prog-table .dv-table-hdr, .sc-prog-table .dv-table-row { min-width:340px; }
+.sc-prog-table .dv-table-hdr, .sc-prog-table .dv-table-row { min-width:360px; }
+.sc-prog-table .dv-col-main { min-width:104px; }
+
+.sc-rep-table { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.sc-rep-table .dv-table-hdr, .sc-rep-table .dv-table-row { min-width:472px; }
+.sc-rep-table .dv-col-main { min-width:132px; }
+.sc-rep-table .dv-col-num { width:52px; }
 
 /* Search & Visibility */
 .sv-hero { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-radius:12px; background:var(--surface-2,rgba(127,127,127,0.08)); margin-bottom:4px; }
@@ -613,6 +623,8 @@ html[data-theme="light"] .skel::after { background:linear-gradient(90deg,transpa
   .sidebar { display:none !important; }
   .left-col-hdr { display:none; } /* replaced by MobileHeader */
   .main-area { width:100%; flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  /* The mobile header already shows the active range; drop the duplicate in-view pill. */
+  .dv-period { display:none !important; }
 
   /* ---- Topbar ---- */
   .topbar { display:none; }
