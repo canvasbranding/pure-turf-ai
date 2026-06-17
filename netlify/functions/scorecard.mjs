@@ -76,12 +76,8 @@ export default async (req) => {
     activity: (calls[id] || 0) + (emails[id] || 0),
   })).sort((a, b) => b.activity - a.activity);
 
-  const debug = url.searchParams.get('debug') === '1'
-    ? { emailsErr: emailsR.status === 'rejected' ? String(emailsR.reason?.message || emailsR.reason).slice(0, 300) : null,
-        callsErr:  callsR.status  === 'rejected' ? String(callsR.reason?.message  || callsR.reason).slice(0, 300) : null }
-    : undefined;
   const ok = unavailable.length < 2;
-  return new Response(JSON.stringify({ dateRange: rangeKey, dateFrom: date_from, dateTo: date_to, fetchedAt: new Date().toISOString(), reps, unavailable, debug }), {
+  return new Response(JSON.stringify({ dateRange: rangeKey, dateFrom: date_from, dateTo: date_to, fetchedAt: new Date().toISOString(), reps, unavailable }), {
     status: 200,
     headers: { ...CORS, ...(ok ? { 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=300, stale-while-revalidate=900' } : { 'Cache-Control': 'no-store' }) },
   });
