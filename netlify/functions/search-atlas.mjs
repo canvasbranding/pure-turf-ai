@@ -16,9 +16,9 @@ const GSC_PROPERTY = 'sc-domain:pureturfllc.com';
 
 const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
 
-async function sa(url) {
+async function sa(url, accept = 'application/json') {
   try {
-    const res = await fetch(url, { headers: { 'X-API-Key': KEY, 'Accept': 'application/json' }, signal: AbortSignal.timeout(15000) });
+    const res = await fetch(url, { headers: { 'X-API-Key': KEY, 'Accept': accept }, signal: AbortSignal.timeout(15000) });
     const text = await res.text();
     let body; try { body = JSON.parse(text); } catch { body = text.slice(0, 400); }
     return { status: res.status, body };
@@ -34,16 +34,12 @@ export default async (req) => {
   const ago = n => { const d = new Date(today); d.setDate(d.getDate() - n); return iso(d); };
 
   const prop = encodeURIComponent(GSC_PROPERTY);
-  const probes = {
-    gscSites:     `${HOST.gsc}/search-console/api/v4/sites/?period1_start=${ago(30)}&period1_end=${iso(today)}&period2_start=${ago(60)}&period2_end=${ago(31)}`,
-    gscPerf:      `${HOST.gsc}/search-console/api/v2/site-property-performance/?selected_property=${prop}`,
-    gscKeywords:  `${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}&limit=10`,
-    gscPages:     `${HOST.gsc}/search-console/api/v2/pages/?selected_property=${prop}&limit=10`,
-    gbpLocations: `${HOST.gbp}/api/gbp/v2/locations/`,
-    rankTracker:  `${HOST.keyword}/api/v1/rank-tracker/`,
-  };
-
+  const cc = '&country_code=US'; // this site's only active GSC country
   const out = { _probedAt: new Date().toISOString() };
-  for (const [k, p] of Object.entries(probes)) out[k] = { url: p, ...(await sa(p)) };
+  out.gscPerf     = await sa(`${HOST.gsc}/search-console/api/v2/site-property-performance/?selected_property=${prop}${cc}`);
+  out.gscKeywords = await sa(`${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}${cc}&limit=10`);
+  out.gscPages    = await sa(`${HOST.gsc}/search-console/api/v2/pages/?selected_property=${prop}${cc}&limit=10`);
+  out.gbpLocations = await sa(`${HOST.gbp}/api/gbp/v2/locations/`, 'application/vnd.api+json');
+  out.rankTracker  = await sa(`${HOST.keyword}/api/v1/rank-tracker/`);
   return new Response(JSON.stringify(out), { status: 200, headers: CORS });
 };
