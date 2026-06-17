@@ -187,13 +187,6 @@ export const handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
-  // Temporary probe: find the customer-identifying field on RG Services records.
-  if (event.queryStringParameters?.rgprobe === '1') {
-    const pr = await fetch('https://api.hubapi.com/crm/v3/properties/2-54724126', { headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` } });
-    const pd = await pr.json();
-    const allProps = (pd.results || []).map(p => p.name).filter(n => !n.startsWith('hs_')).sort();
-    return { statusCode: 200, headers: { ...headers, 'Cache-Control':'no-store' }, body: JSON.stringify({ allProps }) };
-  }
 
 
   const rangeKey = event.queryStringParameters?.range || 'mtd';
@@ -368,7 +361,7 @@ async function fetchRGServices(hubspotToken, date_from) {
   const STATUS_CANCEL_PENDING = '6';
   const STATUS_ACTIVE        = '9';
 
-  const props = 'program_status,program_code,cancel_reason,createdate,hs_lastmodifieddate,sold_date,sold_by_1';
+  const props = 'program_status,program_code,cancel_reason,createdate,hs_lastmodifieddate,sold_date,sold_by_1,name';
   let allServices = [];
   let after = undefined;
 
@@ -447,6 +440,13 @@ async function fetchRGServices(hubspotToken, date_from) {
   });
   const programsByRep = Object.values(byRep).sort((a, b) => b.total - a.total);
 
+  // Estimate UNIQUE customers. RG records are per-PROGRAM (a customer has ~1.7), with no
+  // customer id/association — only the name suffix ("Basic Lawn Program-2026 - Thompson").
+  // Distinct customer key from that suffix; approximate (same-surname customers collide).
+  const custKey = s => { const n = (p(s).name || '').trim(); if (!n) return null; const parts = n.split(' - '); return (parts.length > 1 ? parts.pop() : n).trim().toLowerCase(); };
+  const estActiveCustomers = new Set(active.map(custKey).filter(Boolean)).size;
+  const estNewCustomers    = new Set(newCustomers.map(custKey).filter(Boolean)).size;
+
   // Cancel reasons breakdown (resolved to labels)
   const cancelReasons = {};
   newCancels.forEach(s => {
@@ -466,6 +466,8 @@ async function fetchRGServices(hubspotToken, date_from) {
     byType:           typeCount,
     activeByTier,
     programsByRep,
+    estActiveCustomers,
+    estNewCustomers,
     cancelReasons:    cancelReasonsList,
   };
 }
