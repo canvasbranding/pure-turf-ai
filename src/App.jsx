@@ -249,8 +249,9 @@ const ALL_TILES = [
   { key:'leads',      lbl:'New Leads',      val:0, prefix:'',  sub:'new this period',   dir:'up', perm:'pipeline', group:'Sales' },
   { key:'closeRate',  lbl:'Close Rate',     val:0, prefix:'',  suffix:'%', sub:'won vs lost', dir:'', perm:'pipeline', group:'Sales' },
   { key:'revenue',    lbl:'Revenue',        val:0, prefix:'$', sub:'closed won',        dir:'up', perm:'pipeline', group:'Sales' },
-  { key:'newCustomers',lbl:'New Customers', val:0, prefix:'',  sub:'added this period', dir:'up', perm:'pipeline', group:'Customers' },
-  { key:'activeCustomers',lbl:'Active Customers', val:0, prefix:'', sub:'total book',   dir:'',   perm:'pipeline', group:'Customers' },
+  { key:'newCustomers',lbl:'Programs Sold', val:0, prefix:'',  sub:'sold this period', dir:'up', perm:'pipeline', group:'Customers' },
+  { key:'activeCustomers',lbl:'Active Programs', val:0, prefix:'', sub:'active service book', dir:'', perm:'pipeline', group:'Customers' },
+  { key:'estCustomers',lbl:'Customers (est.)', val:0, prefix:'~', sub:'unique active accounts', dir:'', perm:'pipeline', group:'Customers' },
   { key:'cancellations',lbl:'Cancellations',val:0, prefix:'', sub:'this period',        dir:'dn', perm:'pipeline', group:'Customers' },
   { key:'adSpend',    lbl:'Total Ad Spend', val:0, prefix:'$', sub:'paid search',       dir:'',   perm:'googleAds', group:'Marketing' },
   // Finance (QuickBooks P&L · YTD) — restricted to admin/owner/executive.
@@ -1992,8 +1993,9 @@ function AppInner() {
       case 'leads':       if (h) { val = h.newLeads; sub = 'new this period'; } break;
       case 'closeRate':   if (h && h.closeRate != null) { val = h.closeRate; sub = `${h.wonCount||0} won · ${h.lostCount||0} lost`; } break;
       case 'revenue':     if (h) { val = h.revenue; sub = 'closed won'; } break;
-      case 'newCustomers':    if (rg) { val = rg.newCustomers; sub = 'added this period'; } break;
-      case 'activeCustomers': if (rg) { val = rg.totalActive; sub = 'total active book'; } break;
+      case 'newCustomers':    if (rg) { val = rg.newCustomers; sub = 'sold this period'; } break;
+      case 'activeCustomers': if (rg) { val = rg.totalActive; sub = 'active service book'; } break;
+      case 'estCustomers':    if (rg) { val = rg.estActiveCustomers; sub = 'unique active accounts'; } break;
       case 'cancellations':   if (rg) { val = rg.newCancels; sub = 'cancelled this period'; } break;
       case 'qbRevenue':     { const f = liveStats.finance; if (f) { val = Math.round(f.revenue); } break; }
       case 'qbGrossProfit': { const f = liveStats.finance; if (f) { val = Math.round(f.grossProfit); } break; }
@@ -2664,7 +2666,7 @@ function AppInner() {
 
                   {/* Metric cards — grouped: Marketing · Sales · Customers */}
                   {visibleTiles.length > 0 && (() => {
-                    const ERR_SRC = { google:'google', meta:'meta', gbp:'gbp', pipeline:'hubspot', leads:'hubspot', closeRate:'hubspot', revenue:'hubspot', newCustomers:'rgServices', activeCustomers:'rgServices', cancellations:'rgServices', qbRevenue:'finance', qbGrossProfit:'finance', qbNetIncome:'finance', qbMargin:'finance' };
+                    const ERR_SRC = { google:'google', meta:'meta', gbp:'gbp', pipeline:'hubspot', leads:'hubspot', closeRate:'hubspot', revenue:'hubspot', newCustomers:'rgServices', activeCustomers:'rgServices', estCustomers:'rgServices', cancellations:'rgServices', qbRevenue:'finance', qbGrossProfit:'finance', qbNetIncome:'finance', qbMargin:'finance' };
                     const tileErrored = (k) => !!liveStats?.errors?.[ERR_SRC[k]];
                     const ORDER = ['Sales','Customers','Finance','Marketing'];
                     const groups = ORDER.map(g => ({ g, tiles: visibleTiles.filter(t => (t.group||'Other') === g) })).filter(x => x.tiles.length);
