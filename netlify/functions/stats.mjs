@@ -187,6 +187,17 @@ export const handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
+  // Temporary probe: find the customer-identifying field on RG Services records.
+  if (event.queryStringParameters?.rgprobe === '1') {
+    const pr = await fetch('https://api.hubapi.com/crm/v3/properties/2-54724126', { headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` } });
+    const pd = await pr.json();
+    const matches = (pd.results || []).filter(p => /customer|account|contact|email|address|residential|commercial|company|property_address|service_address|name/i.test(p.name + ' ' + (p.label || ''))).map(p => ({ name: p.name, label: p.label, type: p.type }));
+    const names = matches.map(m => m.name).slice(0, 25).join(',');
+    const sr = await fetch(`https://api.hubapi.com/crm/v3/objects/2-54724126?limit=2&properties=${names}`, { headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` } });
+    const sd = await sr.json();
+    return { statusCode: 200, headers: { ...headers, 'Cache-Control':'no-store' }, body: JSON.stringify({ matches, samples: (sd.results || []).map(r => r.properties) }) };
+  }
+
 
   const rangeKey = event.queryStringParameters?.range || 'mtd';
   const isWarm = event.queryStringParameters?.warm === '1'; // keep-warm forces a real recompute
