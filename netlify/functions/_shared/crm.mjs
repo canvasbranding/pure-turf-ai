@@ -80,9 +80,13 @@ export function leadSourceOf(props) {
 // HubSpot GET with 429 retry/backoff. HubSpot enforces a rolling ~10-second request
 // limit; when we paginate large objects (deals + RG services) this can trip it, so we
 // wait (honoring Retry-After) and retry instead of failing the whole dashboard.
-export async function hubspotGet(url, token, { timeoutMs = 9000, retries = 5 } = {}) {
+export async function hubspotGet(url, token, { timeoutMs = 9000, retries = 5, init = {} } = {}) {
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(timeoutMs) });
+    const res = await fetch(url, {
+      ...init,
+      headers: { 'Authorization': `Bearer ${token}`, ...(init.headers || {}) },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     if (res.status === 429 && attempt < retries) {
       const ra = parseFloat(res.headers.get('Retry-After'));
       const waitMs = Math.min((ra ? ra : 0.4 * Math.pow(2, attempt)) * 1000, 4000);
