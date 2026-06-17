@@ -189,6 +189,16 @@ export const handler = async (event) => {
   const { date_from, date_to } = getDateRange(rangeKey);
   const cdnHeaders = { 'Cache-Control': 'public, max-age=0, must-revalidate', 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=180, stale-while-revalidate=600' };
 
+  // Temporary probe: discover the Windsor QuickBooks datasource + fields.
+  if (event.queryStringParameters?.probe === 'qb') {
+    const ds = event.queryStringParameters.ds || 'quickbooks';
+    const fields = event.queryStringParameters.fields || 'date,account,account_name,account_type,amount,transaction_type,category,name,total,balance';
+    const purl = `https://connectors.windsor.ai/all?api_key=${WINDSOR_KEY}&fields=${fields}&date_from=${date_from}&date_to=${date_to}&datasource=${ds}`;
+    const pr = await fetch(purl).catch(e => ({ ok:false, status:0, text: async () => e.message }));
+    const ptext = await pr.text();
+    return { statusCode: 200, headers: { ...headers, 'Cache-Control':'no-store' }, body: JSON.stringify({ ds, status: pr.status, sample: ptext.slice(0, 1800) }) };
+  }
+
   // Fast path: recent in-memory result on this warm instance. Steady-state speed comes
   // from Netlify's durable CDN cache (headers below) — kept fresh by keep-warm's warm=1
   // recompute every 4 min — so real users are served from the edge and almost never wait
