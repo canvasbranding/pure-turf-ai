@@ -1,5 +1,6 @@
 // Pure Turf AI — Netlify Serverless Function
 import Anthropic from '@anthropic-ai/sdk';
+import { getStore } from '@netlify/blobs';
 import {
   DEAL_STAGE_NAMES, OWNER_NAMES, getDateRange, fetchDealsInPipelines, leadSourceOf,
   PIPELINE_2026_SALES, PIPELINE_2026_COMMERCIAL, ACTIVE_PIPELINES,
@@ -8,22 +9,18 @@ import {
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const WINDSOR_KEY   = process.env.WINDSOR_API_KEY;
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
-const SUPABASE_URL  = process.env.SUPABASE_URL;
-const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 
-// Fire-and-forget query log to Supabase
-function logQuery(email, name, message) {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return;
-  fetch(`${SUPABASE_URL}/rest/v1/pt_chat_logs`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Prefer': 'return=minimal',
-    },
-    body: JSON.stringify({ user_email: email || 'unknown', user_name: name || 'Unknown', message: (message || '').slice(0, 2000) }),
-  }).catch(() => {}); // silent fail — never block chat
+// Query log — stored in Netlify Blobs (already used for auth; no external service needed).
+// One rolling list, newest-first, capped. Read by the David-only query-logs function.
+const QUERY_LOG_MAX = 2000;
+async function logQuery(email, name, message) {
+  try {
+    const store = getStore({ name: 'pt-query-logs', consistency: 'strong' });
+    const log = (await store.get('log', { type: 'json' })) || [];
+    log.unshift({ user_email: email || 'unknown', user_name: name || 'Unknown', message: (message || '').slice(0, 2000), created_at: new Date().toISOString() });
+    if (log.length > QUERY_LOG_MAX) log.length = QUERY_LOG_MAX;
+    await store.setJSON('log', log);
+  } catch { /* never block chat on a logging failure */ }
 }
 
 // ── TOOL DEFINITIONS ──────────────────────────────────────────────────────
@@ -244,9 +241,10 @@ export default async (req) => {
   const { messages, dateRange, userEmail, userName, userRole, liveStats } = payload;
   if (!messages?.length) return new Response(JSON.stringify({ error: 'messages required' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-  // Log the user's latest message (fire-and-forget)
+  // Log the user's latest message. Awaited (it's a quick Blobs read-modify-write) so the
+  // entry persists before we hand back the streaming response and the function freezes.
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-  if (lastUserMsg) logQuery(userEmail, userName, lastUserMsg.content);
+  if (lastUserMsg) await logQuery(userEmail, userName, lastUserMsg.content);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
