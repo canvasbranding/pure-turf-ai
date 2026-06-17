@@ -294,10 +294,12 @@ html[data-theme="dark"] .snav-btn.active {
   position:relative;
 }
 .left-col-hdr {
-  display:flex; align-items:center; justify-content:flex-end;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
   padding:12px 20px 0;
   flex-shrink:0;
 }
+/* "Live data · updated …" sits inline in the header, left-aligned with the tiles below. */
+.left-col-hdr .data-health { margin:0; padding:0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dash-col {
   flex:1; display:flex; flex-direction:column; overflow:hidden;
 }
@@ -348,6 +350,24 @@ html[data-theme="dark"] .snav-btn.active {
 .ads-notice { display:flex; align-items:flex-start; gap:9px; padding:11px 14px; margin-bottom:16px; border-radius:10px; font-size:12.5px; line-height:1.45; color:var(--text-1); background:var(--accent-dim,rgba(94,106,210,0.12)); border:1px solid var(--accent-bdr,rgba(94,106,210,0.3)); }
 .ads-notice-icon { font-size:14px; flex-shrink:0; line-height:1.4; }
 .ads-notice strong { font-weight:700; }
+
+/* Trend chart (SVG area + line) */
+.trend-chart { background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:14px 16px 10px; box-shadow:var(--shadow-sm); margin-bottom:20px; }
+html[data-theme="dark"] .trend-chart { background:rgba(255,255,255,0.04); }
+.trend-chart-top { display:flex; align-items:baseline; gap:10px; margin-bottom:6px; }
+.trend-chart-now { font-size:22px; font-weight:700; color:var(--text-1); line-height:1; letter-spacing:-0.02em; }
+.trend-chart-delta { font-size:12px; font-weight:700; }
+.trend-chart-delta.up { color:#10B981; }
+.trend-chart-delta.dn { color:#EF4444; }
+.trend-chart-labels { display:flex; justify-content:space-between; margin-top:7px; font-size:9.5px; color:var(--text-3); }
+
+/* GBP per-location completeness */
+.gbp-loc-list { display:flex; flex-direction:column; gap:7px; margin-bottom:20px; }
+.gbp-loc { display:flex; align-items:center; gap:10px; }
+.gbp-loc-name { width:130px; flex-shrink:0; font-size:12px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gbp-loc-track { flex:1; height:7px; border-radius:4px; background:rgba(127,127,127,0.14); overflow:hidden; }
+.gbp-loc-fill { height:100%; border-radius:4px; background:linear-gradient(90deg, var(--accent,#5E6AD2), #10B981); }
+.gbp-loc-pct { width:38px; text-align:right; font-size:11.5px; font-weight:600; color:var(--text-2); }
 
 /* Finance income statement */
 .fin-statement { display:flex; flex-direction:column; }

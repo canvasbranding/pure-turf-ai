@@ -98,11 +98,19 @@ function relTime(iso) {
 
 // Data-health strip: shows which sources failed to refresh, plus when the data was last updated.
 // Silent failures are the worst outcome for a decision dashboard, so we make them visible.
-function DataHealthBanner({ liveStats, statsLoading }) {
+function DataHealthBanner({ liveStats, statsLoading, variant }) {
   if (!liveStats || statsLoading) return null;
   const failed = Object.keys(liveStats.errors || {});
   const warnings = liveStats.warnings || [];
   const updated = relTime(liveStats.fetchedAt);
+  const hasIssue = warnings.length > 0 || failed.length > 0;
+  // 'inline' = the subtle "Live data · updated" status that lives in the header row.
+  if (variant === 'inline') {
+    if (hasIssue) return null;
+    return updated ? <div className="data-health data-health-ok">Live data · updated {updated}</div> : null;
+  }
+  // 'banner' (default) = prominent full-width alerts; nothing when all is well.
+  if (!hasIssue) return null;
   // Sanity-guard warnings (e.g. a sudden deal-count collapse) take priority — that's
   // exactly the silent-corruption signal we want surfaced loudest.
   if (warnings.length > 0) {
@@ -112,9 +120,6 @@ function DataHealthBanner({ liveStats, statsLoading }) {
         <span>{warnings.join(' ')} Double-check before relying on these figures.</span>
       </div>
     );
-  }
-  if (failed.length === 0) {
-    return updated ? <div className="data-health data-health-ok">Live data · updated {updated}</div> : null;
   }
   const names = failed.map(k => SOURCE_LABELS[k] || k).join(', ');
   return (
@@ -710,11 +715,71 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
   );
 }
 
+// Smooth SVG area+line trend chart. `data` = numbers; optional `secondary` = second line.
+function TrendChart({ data, secondary, height = 110, color = '#5E6AD2', color2 = '#10B981', labels, valueFmt }) {
+  const a = (data || []).map(Number).filter(v => Number.isFinite(v));
+  if (a.length < 2) return null;
+  const b = secondary && secondary.length === a.length ? secondary.map(Number) : null;
+  const all = b ? a.concat(b.filter(Number.isFinite)) : a;
+  const max = Math.max(...all), min = Math.min(...all), range = (max - min) || 1;
+  const W = 320, H = 110, pad = 10;
+  const X = i => pad + (i / (a.length - 1)) * (W - pad * 2);
+  const Y = v => H - pad - ((v - min) / range) * (H - pad * 2);
+  // Smooth path via Catmull-Rom → cubic bezier.
+  const smooth = arr => {
+    const p = arr.map((v, i) => [X(i), Y(v)]);
+    let d = `M ${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;
+    for (let i = 0; i < p.length - 1; i++) {
+      const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2;
+      const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+      d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+    }
+    return d;
+  };
+  const gid = `tcg-${color.replace(/[^a-z0-9]/gi, '')}`;
+  const line = smooth(a);
+  const area = `${line} L ${X(a.length - 1).toFixed(1)} ${H - pad} L ${X(0).toFixed(1)} ${H - pad} Z`;
+  const last = a[a.length - 1], first = a[0];
+  return (
+    <div className="trend-chart">
+      <div className="trend-chart-top">
+        <span className="trend-chart-now">{valueFmt ? valueFmt(last) : last.toLocaleString()}</span>
+        {first !== last && <span className={`trend-chart-delta ${last >= first ? 'up' : 'dn'}`}>{last >= first ? '▲' : '▼'} {valueFmt ? valueFmt(Math.abs(last - first)) : Math.abs(Math.round((last - first) * 10) / 10).toLocaleString()}</span>}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill={`url(#${gid})`} />
+        {b && <path d={smooth(b)} fill="none" stroke={color2} strokeWidth="1.5" strokeOpacity="0.75" vectorEffect="non-scaling-stroke" strokeDasharray="4 3" strokeLinejoin="round" strokeLinecap="round" />}
+        <path d={line} fill="none" stroke={color} strokeWidth="2.25" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
+      {labels && <div className="trend-chart-labels">{labels.map((l, i) => <span key={i}>{l}</span>)}</div>}
+    </div>
+  );
+}
+
 // ══ GBP VIEW ══════════════════════════════════════════════════════════════
 function GBPView({ liveStats, statsLoading, dateRange, sendMessage }) {
   const d = liveStats?.gbp;
   const rangeLabel = DATE_RANGES[dateRange]?.label || 'Month to date';
   const fmtN = v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v ?? '–');
+
+  // Search Atlas adds reputation + per-location profile completeness.
+  const [sa, setSa] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch('/.netlify/functions/search-atlas').then(r => r.json()).then(j => { if (!cancelled) setSa(j); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const reviews = sa?.reviews;
+  const locs = sa?.gbpLocations || [];
+  const avgCompleteness = locs.filter(l => l.completeness != null).length
+    ? Math.round(locs.filter(l => l.completeness != null).reduce((s, l) => s + l.completeness, 0) / locs.filter(l => l.completeness != null).length) : null;
 
   const metrics = d ? [
     { label:'Profile Views',      val: fmtN(d.views),      icon:'📍', desc:'Impressions on Google' },
@@ -752,18 +817,43 @@ function GBPView({ liveStats, statsLoading, dateRange, sendMessage }) {
         ))}
       </div>
 
-      {/* 14-day trend */}
-      {d?.trend?.length > 0 && (
+      {/* Reputation + profile health (Search Atlas) */}
+      {(reviews || avgCompleteness != null) && (
         <>
-          <div className="dv-section-label">14-Day View Trend</div>
-          <div className="dv-sparkbar-wrap">
-            {d.trend.map((t, i) => (
-              <div key={t.date} className="dv-sparkbar-col" title={`${t.date}: ${t.views} views, ${t.calls} calls`}>
-                <div className="dv-sparkbar" style={{height:`${Math.round(t.views / maxViews * 100)}%`}}/>
-                {i % 3 === 0 && <div className="dv-sparkbar-label">{t.date.slice(5)}</div>}
-              </div>
-            ))}
+          <div className="dv-section-label">Reputation &amp; Profile Health</div>
+          <div className="dv-kpi-row" style={{marginBottom:14}}>
+            {reviews && <div className="dv-kpi-card"><div className="dv-kpi-label">Rating</div><div className="dv-kpi-val">{reviews.avgRating}<span style={{color:'#F5B301'}}>★</span></div><div className="dv-kpi-sub">{reviews.total.toLocaleString()} reviews</div></div>}
+            {reviews && <div className="dv-kpi-card"><div className="dv-kpi-label">5-Star Reviews</div><div className="dv-kpi-val">{reviews.fiveStar.toLocaleString()}</div><div className="dv-kpi-sub">{Math.round(reviews.fiveStar/reviews.total*100)}% of total</div></div>}
+            {avgCompleteness != null && <div className="dv-kpi-card"><div className="dv-kpi-label">Profile Complete</div><div className="dv-kpi-val">{avgCompleteness}%</div><div className="dv-kpi-sub">avg across locations</div></div>}
+            <div className="dv-kpi-card"><div className="dv-kpi-label">Locations</div><div className="dv-kpi-val">{locs.length || '–'}</div><div className="dv-kpi-sub">verified profiles</div></div>
           </div>
+          {locs.some(l => l.completeness != null) && (
+            <div className="gbp-loc-list">
+              {locs.filter(l => l.completeness != null).map(l => (
+                <div key={l.id} className="gbp-loc">
+                  <div className="gbp-loc-name">{(l.address || l.name || '').split(',')[0]}</div>
+                  <div className="gbp-loc-track"><div className="gbp-loc-fill" style={{width:`${l.completeness}%`}}/></div>
+                  <div className="gbp-loc-pct">{l.completeness}%</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Views & calls trend */}
+      {d?.trend?.length > 1 && (
+        <>
+          <div className="dv-section-label" style={{marginTop:4}}>
+            {d.trend.length}-Day Trend
+            <span className="dv-section-note" style={{opacity:1}}><span style={{color:'var(--accent,#5E6AD2)'}}>● Views</span>&nbsp;&nbsp;<span style={{color:'#10B981'}}>┄ Calls</span></span>
+          </div>
+          <TrendChart
+            data={d.trend.map(t => t.views)}
+            secondary={d.trend.map(t => t.calls)}
+            valueFmt={v => Math.round(v).toLocaleString()}
+            labels={[d.trend[0].date.slice(5), d.trend[Math.floor(d.trend.length/2)].date.slice(5), d.trend[d.trend.length-1].date.slice(5)]}
+          />
         </>
       )}
 
@@ -1794,13 +1884,12 @@ function SearchVisibilityView({ sendMessage }) {
                   <div key={k.label} className="dv-kpi-card"><div className="dv-kpi-label">{k.label}</div><div className="dv-kpi-val">{k.val}</div></div>
                 ))}
               </div>
-              {data.visibilityTrend?.length > 1 && (() => { const mx = Math.max(...data.visibilityTrend, 0.01); return (
-                <div className="dv-sparkbar-wrap" style={{marginBottom:18}}>
-                  {data.visibilityTrend.map((v, i) => (
-                    <div key={i} className="dv-sparkbar-col"><div className="dv-sparkbar" style={{height:`${Math.max(8, Math.round((v/mx)*100))}%`}}/></div>
-                  ))}
-                </div>
-              ); })()}
+              {data.visibilityTrend?.length > 1 && (
+                <>
+                  <div className="dv-section-label" style={{marginTop:4}}>Search Visibility Trend</div>
+                  <TrendChart data={data.visibilityTrend} color="#10B981" valueFmt={v => v.toFixed(1)} labels={['earlier', '', 'now']} />
+                </>
+              )}
             </>
           ); })()}
 
@@ -2648,16 +2737,17 @@ function AppInner() {
               {/* LEFT: DASHBOARD */}
               <div className={`left-col${isMobile ? (mobileTab !== 'chat' ? ' mobile-active' : ' mobile-hidden') : ''}`} ref={dashRef}>
 
-                {/* Left column header with date range picker — desktop only */}
+                {/* Left column header with status + date range picker — desktop only */}
                 {!isMobile && (
                 <div className="left-col-hdr">
+                  <DataHealthBanner variant="inline" liveStats={liveStats} statsLoading={statsLoading}/>
                   <select className="range-picker" value={dateRange} onChange={e=>setDateRange(e.target.value)}>
                     {Object.entries(DATE_RANGES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                   </select>
                 </div>
                 )}
-
-                <DataHealthBanner liveStats={liveStats} statsLoading={statsLoading}/>
+                {isMobile && <DataHealthBanner variant="inline" liveStats={liveStats} statsLoading={statsLoading}/>}
+                <DataHealthBanner variant="banner" liveStats={liveStats} statsLoading={statsLoading}/>
 
 
                 {/* DASHBOARD VIEW */}

@@ -106,7 +106,8 @@ export default async (req) => {
   if (gbp.status === 200) {
     out.gbpLocations = (gbp.body?.data || []).map(l => {
       const a = l.attributes || {};
-      return { id: l.id, name: a.business_name || a.title || a.store_code, address: a.business_address, verified: a.is_verified, placeId: a.place_id, mapsCid: a.maps_cid };
+      const pc = a.profile_completeness;
+      return { id: l.id, name: a.business_name || a.title || a.store_code, address: a.business_address, verified: a.is_verified, completeness: typeof pc === 'number' ? Math.round(pc <= 1 ? pc * 100 : pc) : null, placeId: a.place_id, mapsCid: a.maps_cid };
     });
   } else out.errors.gbp = `gbp ${gbp.status}`;
 
