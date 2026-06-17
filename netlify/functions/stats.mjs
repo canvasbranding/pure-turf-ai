@@ -1,5 +1,4 @@
 // Pure Turf AI — Dashboard Stats + Goals Data Function
-import { getStore } from '@netlify/blobs';
 import {
   PIPELINE_2026_SALES, DEAL_STAGE_NAMES, DEAL_STAGES_WON, DEAL_STAGES_LOST, EARLY_STAGES,
   OWNER_NAMES, CLOSE_RATE_EXCLUDED, REP_NOTES, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, fetchDealsInPipelines, leadSourceOf,
@@ -165,20 +164,9 @@ async function fetchHubSpotDeals(date_from) {
 const STATS_CACHE = new Map(); // rangeKey -> { at: epochMs, body: string }
 const CACHE_TTL_MS = 300000;   // 5 minutes (kept warm by keep-warm.mjs every 4 min)
 
-// Durable snapshot (Netlify Blobs). Survives cold starts / instance recycles, so a
-// user who hits a cold function gets the last good result INSTANTLY instead of
-// waiting ~11s for the full HubSpot fetch. keep-warm refreshes it every 4 min.
-const SNAPSHOT_SERVE_MAX = 900000; // serve a durable snapshot up to 15 min old without recomputing
-let LAST_BLOB_ERR = null;
-function snapStore() { return getStore({ name: 'pt-stats' }); }
-async function readSnapshot(rangeKey) {
-  try { return await snapStore().get(`stats-${rangeKey}`, { type: 'json' }); }
-  catch (e) { LAST_BLOB_ERR = `read: ${e.message}`; return null; }
-}
-async function writeSnapshot(rangeKey, total, body) {
-  try { await snapStore().setJSON(`stats-${rangeKey}`, { at: Date.now(), total, body }); }
-  catch (e) { LAST_BLOB_ERR = `write: ${e.message}`; }
-}
+// Last good deal total per range — baseline for the data-sanity guard. Survives across
+// requests on a warm instance; resets on a cold start (guard simply skips the first read).
+const LAST_GOOD_TOTAL = new Map(); // rangeKey -> total
 
 export const handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
@@ -189,19 +177,13 @@ export const handler = async (event) => {
   const { date_from, date_to } = getDateRange(rangeKey);
   const cdnHeaders = { 'Cache-Control': 'public, max-age=0, must-revalidate', 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=180, stale-while-revalidate=600' };
 
-  // Fast path 1: recent in-memory result on this warm instance.
+  // Fast path: recent in-memory result on this warm instance. Steady-state speed comes
+  // from Netlify's durable CDN cache (headers below) — kept fresh by keep-warm's warm=1
+  // recompute every 4 min — so real users are served from the edge and almost never wait
+  // for the ~11s HubSpot fetch. warm=1 bypasses this to force the refresh.
   const cached = STATS_CACHE.get(rangeKey);
   if (!isWarm && cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return { statusCode: 200, headers: { ...headers, ...cdnHeaders }, body: cached.body };
-  }
-
-  // Fast path 2: durable snapshot — instant even on a cold instance. Avoids the ~11s
-  // wait (and possible timeout) when the in-memory cache is empty. keep-warm keeps it
-  // fresh; we still recompute if it's older than SNAPSHOT_SERVE_MAX (keep-warm down).
-  let prevSnap = await readSnapshot(rangeKey);
-  if (!isWarm && prevSnap?.body && Date.now() - prevSnap.at < SNAPSHOT_SERVE_MAX) {
-    STATS_CACHE.set(rangeKey, { at: prevSnap.at, body: prevSnap.body });
-    return { statusCode: 200, headers: { ...headers, ...cdnHeaders }, body: prevSnap.body };
   }
 
   const [googleResult, metaResult, gbpResult, hubspotResult, rgResult] = await Promise.allSettled([
@@ -346,7 +328,7 @@ export const handler = async (event) => {
   // fetch is probably incomplete (exactly the failure mode of the old truncation bug).
   // Flag it for the dashboard banner — and DON'T persist it, so a bad reading can't
   // poison the cache; the durable snapshot keeps serving last-good to everyone else.
-  const prevTotal = prevSnap?.total || 0;
+  const prevTotal = LAST_GOOD_TOTAL.get(rangeKey) || 0;
   const newTotal  = stats.pipeline?.total || 0;
   let suspicious = false;
   if (prevTotal > 100 && newTotal < prevTotal * 0.6) {
@@ -355,16 +337,13 @@ export const handler = async (event) => {
   }
 
   // CDN caching: the HubSpot fetch takes ~11s, so serve the computed result from
-  // Netlify's edge + a durable snapshot instead of re-querying on every load.
-  // Don't cache a response that errored or looks incomplete (would pin broken data).
+  // Netlify's durable edge cache instead of re-querying on every load. Don't cache a
+  // response that errored or looks incomplete (would pin broken data to the edge).
   const hasErrors = Object.keys(stats.errors).length > 0;
   const body = JSON.stringify(stats);
   if (!hasErrors && !suspicious) {
     STATS_CACHE.set(rangeKey, { at: Date.now(), body });
-    await writeSnapshot(rangeKey, newTotal, body);
-  }
-  if (event.queryStringParameters?.debug === '1') {
-    return { statusCode: 200, headers, body: JSON.stringify({ _blobErr: LAST_BLOB_ERR, total: newTotal }) };
+    if (newTotal > 0) LAST_GOOD_TOTAL.set(rangeKey, newTotal);
   }
   const cacheHeaders = (hasErrors || suspicious) ? { 'Cache-Control': 'no-store' } : cdnHeaders;
   return { statusCode: 200, headers: { ...headers, ...cacheHeaders }, body };
