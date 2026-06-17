@@ -1591,6 +1591,34 @@ function ScorecardView({ liveStats, dateRange, sendMessage }) {
         ))}
       </div>
 
+      {/* Programs sold per rep, by tier (RG Services · sold_by_1) */}
+      {(() => {
+        const pbr = liveStats?.rgServices?.programsByRep || [];
+        const byName = {}; pbr.forEach(x => { byName[x.rep] = x; });
+        const repProgs = rows.map(r => byName[r.name]).filter(Boolean).sort((a, b) => b.total - a.total);
+        if (!repProgs.length) return null;
+        const TIERS = [['basic','Basic'],['essential','Ess'],['elite','Elite'],['mosquito','Mosq'],['aeration','Aer']];
+        return (
+          <>
+            <div className="dv-section-label" style={{margin:'16px 0 8px'}}>Programs Sold · {rangeLabel}</div>
+            <div className="dv-table sc-prog-table">
+              <div className="dv-table-hdr">
+                <div className="dv-col-main">Rep</div>
+                {TIERS.map(([k,l]) => <div key={k} className="dv-col-num">{l}</div>)}
+                <div className="dv-col-num">Total</div>
+              </div>
+              {repProgs.map(x => (
+                <div key={x.rep} className="dv-table-row" onClick={() => sendMessage(`What programs has ${x.rep.split(' ')[0]} sold this period and how does the mix compare to other reps?`)}>
+                  <div className="dv-col-main dv-rep-name">{x.rep}</div>
+                  {TIERS.map(([k]) => <div key={k} className="dv-col-num">{x[k] || 0}</div>)}
+                  <div className="dv-col-num dv-won-num">{x.total}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
+
       <div className="dv-section-label" style={{margin:'16px 0 8px'}}>Touches per Win</div>
       <div className="sc-note">How many calls + emails it takes each rep to close one deal — lower is more efficient.</div>
       <div className="dv-funnel">
