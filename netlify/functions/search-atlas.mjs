@@ -32,14 +32,59 @@ export default async (req) => {
   const today = new Date();
   const iso = d => d.toISOString().slice(0, 10);
   const ago = n => { const d = new Date(today); d.setDate(d.getDate() - n); return iso(d); };
-
   const prop = encodeURIComponent(GSC_PROPERTY);
   const cc = '&country_code=US'; // this site's only active GSC country
-  const out = { _probedAt: new Date().toISOString() };
-  out.gscPerf     = await sa(`${HOST.gsc}/search-console/api/v2/site-property-performance/?selected_property=${prop}${cc}`);
-  out.gscKeywords = await sa(`${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}${cc}&limit=10`);
-  out.gscPages    = await sa(`${HOST.gsc}/search-console/api/v2/pages/?selected_property=${prop}${cc}&limit=10`);
-  out.gbpLocations = await sa(`${HOST.gbp}/api/gbp/v2/locations/`, 'application/vnd.api+json');
-  out.rankTracker  = await sa(`${HOST.keyword}/api/v1/rank-tracker/`);
-  return new Response(JSON.stringify(out), { status: 200, headers: CORS });
+  // GSC keyword/page endpoints compare two periods: last 28 days vs the prior 28.
+  const periods = `&period1_start=${ago(28)}&period1_end=${iso(today)}&period2_start=${ago(56)}&period2_end=${ago(29)}`;
+
+  const [perf, keywords, pages, gbp, rank] = await Promise.all([
+    sa(`${HOST.gsc}/search-console/api/v2/site-property-performance/?selected_property=${prop}${cc}`),
+    sa(`${HOST.gsc}/search-console/api/v2/keywords/?selected_property=${prop}${cc}${periods}&page_size=10&order_by=-clicks`),
+    sa(`${HOST.gsc}/search-console/api/v2/pages/?selected_property=${prop}${cc}${periods}&page_size=10&order_by=-clicks`),
+    sa(`${HOST.gbp}/api/gbp/v2/locations/`, 'application/vnd.api+json'),
+    sa(`${HOST.keyword}/api/v1/rank-tracker/`),
+  ]);
+
+  const out = { fetchedAt: new Date().toISOString(), errors: {} };
+
+  // ── GSC website search traffic (United States) ──────────────
+  if (perf.status === 200) {
+    const us = (perf.body?.performance_by_country || []).find(r => r.country === 'US') || perf.body?.performance_by_country?.[0];
+    if (us) out.gsc = {
+      clicks: us.clicks, impressions: us.impressions,
+      ctr: Math.round((parseFloat(us.ctr) || 0) * 1000) / 10, // %
+      position: Math.round((parseFloat(us.pos) || 0) * 10) / 10,
+      periodDays: 90,
+    };
+  } else out.errors.gsc = `gsc ${perf.status}`;
+
+  const rows = r => (r.status === 200 ? (Array.isArray(r.body) ? r.body : r.body?.results || r.body?.data || []) : []);
+  out.gscTopKeywords = rows(keywords).slice(0, 10).map(k => ({ term: k.keyword || k.query || k.term, clicks: k.clicks, impressions: k.impressions, position: k.position ?? k.pos }));
+  out.gscTopPages    = rows(pages).slice(0, 10).map(p => ({ page: p.page || p.url, clicks: p.clicks, impressions: p.impressions }));
+
+  // ── Local rank tracker (map-grid heatmap project) ───────────
+  const rt = rows(rank)[0];
+  if (rt) {
+    const leg = rt.position_legends || {};
+    out.local = {
+      name: rt.name || rt.hostname,
+      avgPosition: leg.current_avg_position ?? rt.average_position,
+      prevPosition: leg.previous_avg_position ?? null,
+      delta: leg.position_delta ?? null,
+      trackedKeywords: rt.tracked_keywords_count ?? rt.targeted_keywords_count,
+      estimatedTraffic: rt.estimated_traffic,
+      competitors: rt.competitors,
+      locations: rt.locations,
+    };
+  } else if (rank.status !== 200) out.errors.local = `rank ${rank.status}`;
+
+  // ── GBP locations (JSON:API) ────────────────────────────────
+  if (gbp.status === 200) {
+    out.gbpLocations = (gbp.body?.data || []).map(l => {
+      const a = l.attributes || {};
+      return { id: l.id, name: a.business_name || a.title || a.store_code, address: a.business_address, verified: a.is_verified, placeId: a.place_id, mapsCid: a.maps_cid };
+    });
+  } else out.errors.gbp = `gbp ${gbp.status}`;
+
+  return new Response(JSON.stringify(out), { status: 200, headers: { ...CORS, 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=3600, stale-while-revalidate=86400' } });
 };
