@@ -86,6 +86,14 @@ export default async (req) => {
     const ranked = page1 + (cur.serp_11_20 || 0) + (cur.serp_21_50 || 0) + (cur.serp_51_100 || 0);
     const ud = rt.keywords_up_down_report || {};
     out.keywordWins = { atTop1: at1, top3, page1, ranked, improved: ud.keywords_up ?? null, declined: ud.keywords_down ?? null };
+    // The actual terms we rank best for — the showcase list.
+    const tk = Array.isArray(rt.tracked_keywords) ? rt.tracked_keywords : [];
+    out.topKeywords = tk
+      .map(k => ({ term: k.keyword || k.term, position: k.position ?? k.rank ?? k.current_position, location: (k.location || '').split(',')[0] }))
+      .filter(k => k.term && k.position != null && k.position > 0)
+      .sort((a, b) => a.position - b.position)
+      .slice(0, 12);
+    out._tkSample = tk[0] || null;
     // Search-visibility trend (oldest→newest for a sparkline).
     out.visibilityTrend = (rt.search_visibility_report || []).slice(0, 21).map(p => p.sv).reverse();
   } else if (rank.status !== 200) out.errors.local = `rank ${rank.status}`;

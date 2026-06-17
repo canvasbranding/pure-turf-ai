@@ -2655,7 +2655,7 @@ function AppInner() {
                   {visibleTiles.length > 0 && (() => {
                     const ERR_SRC = { google:'google', meta:'meta', gbp:'gbp', pipeline:'hubspot', leads:'hubspot', closeRate:'hubspot', revenue:'hubspot', newCustomers:'rgServices', activeCustomers:'rgServices', cancellations:'rgServices', qbRevenue:'finance', qbGrossProfit:'finance', qbNetIncome:'finance', qbMargin:'finance' };
                     const tileErrored = (k) => !!liveStats?.errors?.[ERR_SRC[k]];
-                    const ORDER = ['Finance','Sales','Customers','Marketing'];
+                    const ORDER = ['Sales','Customers','Finance','Marketing'];
                     const groups = ORDER.map(g => ({ g, tiles: visibleTiles.filter(t => (t.group||'Other') === g) })).filter(x => x.tiles.length);
                     const other = visibleTiles.filter(t => !ORDER.includes(t.group));
                     if (other.length) groups.push({ g:'Other', tiles: other });
