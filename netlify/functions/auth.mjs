@@ -37,6 +37,16 @@ async function verifyPin(pin, stored) {
   const { hash } = await hashPin(pin, salt);
   return hash === stored;
 }
+// Brute-force protection. A 4-digit PIN is only 10k combinations, so throttle
+// guesses: after MAX_ATTEMPTS consecutive misses, lock the account for LOCKOUT_MS.
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
+function lockedFor(user) {
+  if (!user?.lockout_until) return 0;
+  const remaining = new Date(user.lockout_until).getTime() - Date.now();
+  return remaining > 0 ? remaining : 0;
+}
+
 function getInitials(name) { return name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2); }
 function isAdmin(role) { return ['admin', 'marketing', 'executive'].includes(role); }
 async function requireAdmin(email) {
@@ -98,10 +108,31 @@ export default async (req) => {
       }
       if (!roster && user.status === 'pending') return json(403, { error: 'Your account is awaiting approval.' });
       if (user.status === 'disabled')           return json(403, { error: 'Your account has been disabled.' });
+
+      // Locked out from too many wrong PINs?
+      const lockMs = lockedFor(user);
+      if (lockMs > 0) {
+        const mins = Math.ceil(lockMs / 60000);
+        return json(429, { error: `Too many incorrect PINs. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` });
+      }
+
       const valid = await verifyPin(pin, user.pin_hash);
-      if (!valid) return json(401, { error: 'Incorrect PIN.' });
+      if (!valid) {
+        const attempts = (user.failed_attempts || 0) + 1;
+        const locked = attempts >= MAX_ATTEMPTS;
+        await putUser(e, {
+          ...user,
+          failed_attempts: locked ? 0 : attempts,
+          lockout_until: locked ? new Date(Date.now() + LOCKOUT_MS).toISOString() : (user.lockout_until || null),
+        });
+        if (locked) return json(429, { error: 'Too many incorrect PINs. Your account is locked for 15 minutes.' });
+        const left = MAX_ATTEMPTS - attempts;
+        return json(401, { error: `Incorrect PIN. ${left} attempt${left === 1 ? '' : 's'} left.` });
+      }
+
       const r = roster || user;
-      await putUser(e, { ...user, name: r.name, role: r.role, title: r.title, initials: r.initials, last_login: now });
+      // Successful login clears any failed-attempt / lockout state.
+      await putUser(e, { ...user, name: r.name, role: r.role, title: r.title, initials: r.initials, last_login: now, failed_attempts: 0, lockout_until: null });
       return json(200, { ok: true, user: { email: e, name: r.name, role: r.role, initials: r.initials, title: r.title } });
     }
 
@@ -138,7 +169,7 @@ export default async (req) => {
       if (!(await requireAdmin(requester_email))) return json(403, { error: 'Unauthorized' });
       const target = (user_id || email || '').toLowerCase();
       const u = await getUser(target);
-      if (u) await putUser(target, { ...u, pin_hash: null });
+      if (u) await putUser(target, { ...u, pin_hash: null, failed_attempts: 0, lockout_until: null });
       return json(200, { ok: true });
     }
 

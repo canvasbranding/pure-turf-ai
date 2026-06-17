@@ -78,6 +78,40 @@ const DEFAULT_PERMISSIONS = {
 };
 const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', mondayBrief:'Mon. Brief', adminPanel:'Admin Panel', goalAdmin:'Goal Admin', teamGoals:'Team Goals', manageUsers:'Manage Users' };
 const ROLE_LABELS = { admin:'Admin', owner:'Owner', marketing:'Marketing', executive:'Executive', sales_manager:'Sales Mgr', sales:'Sales' };
+
+// Friendly names for data sources — used by the data-health banner and tile error states
+// so users never see raw messages like "Windsor google_ads 500".
+const SOURCE_LABELS = { google:'Google Ads', meta:'Meta Ads', gbp:'Google Business Profile', hubspot:'HubSpot pipeline', rgServices:'Customer data' };
+
+// "Updated 3 min ago" from an ISO timestamp.
+function relTime(iso) {
+  if (!iso) return null;
+  const secs = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (secs < 60) return 'just now';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  return `${Math.round(hrs / 24)} d ago`;
+}
+
+// Data-health strip: shows which sources failed to refresh, plus when the data was last updated.
+// Silent failures are the worst outcome for a decision dashboard, so we make them visible.
+function DataHealthBanner({ liveStats, statsLoading }) {
+  if (!liveStats || statsLoading) return null;
+  const failed = Object.keys(liveStats.errors || {});
+  const updated = relTime(liveStats.fetchedAt);
+  if (failed.length === 0) {
+    return updated ? <div className="data-health data-health-ok">Live data · updated {updated}</div> : null;
+  }
+  const names = failed.map(k => SOURCE_LABELS[k] || k).join(', ');
+  return (
+    <div className="data-health data-health-warn" role="status">
+      <span className="dh-dot" aria-hidden="true">⚠</span>
+      <span>Couldn’t refresh <strong>{names}</strong> — showing the last good numbers where available{updated ? `, updated ${updated}` : ''}.</span>
+    </div>
+  );
+}
 const ROLE_COLORS = { admin:'#5E6AD2', owner:'#8B5CF6', marketing:'#0EA5E9', executive:'#10B981', sales_manager:'#F59E0B', sales:'var(--text-3)' };
 const ROLE_OPTIONS = ['admin','owner','marketing','executive','sales_manager','sales'];
 
@@ -626,7 +660,7 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
           ))}
         </div>
       ) : (
-        <div className="dv-empty">{d ? 'No campaign data for this period' : liveStats?.errors?.google ? `⚠ ${liveStats.errors.google}` : 'Loading…'}</div>
+        <div className="dv-empty">{d ? 'No campaign data for this period' : liveStats?.errors?.google ? '⚠ Google Ads data couldn’t be loaded right now' : 'Loading…'}</div>
       )}
 
       <button className="dv-ai-btn" onClick={() => sendMessage(`Give me a full Google Ads analysis for ${rangeLabel} — spend, CPA by campaign, what's over-performing, what needs attention.`)}>
@@ -808,6 +842,42 @@ function PipelineView({ liveStats, statsLoading, dateRange, sendMessage }) {
           </div>
         </>
       )}
+
+      {/* Lead sources (True Lead Source attribution) */}
+      {h?.leadSources?.length > 0 && (() => {
+        const maxSrc = Math.max(...h.leadSources.map(s => s.count), 1);
+        const taggedPct = h.newLeads > 0 ? Math.round((h.taggedLeads / h.newLeads) * 100) : 0;
+        return (
+          <>
+            <div className="dv-section-label">
+              By Source
+              <span className="dv-section-note">{h.taggedLeads}/{h.newLeads} tagged · {taggedPct}%</span>
+            </div>
+            {taggedPct < 60 && (
+              <div className="data-health data-health-warn" role="status" style={{marginBottom:10, cursor:'pointer'}}
+                onClick={() => sendMessage(`Only ${taggedPct}% of this period's leads have a True Lead Source set. Which reps and stages have the most untagged deals, and what's the fastest way to get them tagged?`)}>
+                <span className="dh-dot" aria-hidden="true">⚠</span>
+                <span>Only <strong>{taggedPct}% of leads are tagged</strong> with a source — the breakdown below is unreliable until reps set True Lead Source in HubSpot. Tap to see how to fix it.</span>
+              </div>
+            )}
+            <div className="dv-funnel">
+              {h.leadSources.map(s => (
+                <div key={s.source} className={`dv-funnel-row${s.unassigned ? ' dv-lost' : ''}`}
+                  onClick={() => sendMessage(s.unassigned
+                    ? `${s.count} of our ${h.newLeads} new leads this period have no True Lead Source set. Which reps or stages are they in, and how do we fix the tagging?`
+                    : `Tell me about leads from "${s.source}" this period — how many, who's working them, and how they're converting.`)}>
+                  <div className="dv-funnel-label">{s.unassigned ? 'Unassigned (needs tagging)' : s.source}</div>
+                  <div className="dv-funnel-bar-wrap">
+                    <div className="dv-funnel-bar" style={{width:`${Math.round(s.count / maxSrc * 100)}%`}}/>
+                  </div>
+                  <div className="dv-funnel-count">{s.count}</div>
+                  <div className="dv-funnel-val">{s.pct}%</div>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Recent deals */}
       {h?.recentDeals?.length > 0 && (
@@ -1543,7 +1613,6 @@ function AppInner() {
     e?.preventDefault();
     const val = emailInput.trim().toLowerCase();
     if (!val) { setEmailErr('Enter your work email.'); return; }
-    if (val !== 'dhamby@pureturfllc.com') { setEmailErr('Access is currently restricted'); return; }
     const user = USERS.find(u => u.email === val);
     if (!user) { setEmailErr('No account found with that email.'); return; }
     setEmailErr(''); setSelectedUser(user);
@@ -1663,7 +1732,6 @@ function AppInner() {
     setSignupErr('');
     if (!signupName.trim()) { setSignupErr('Enter your full name.'); return; }
     if (!signupEmail.trim()) { setSignupErr('Enter your email.'); return; }
-    if (signupEmail.trim().toLowerCase() !== 'dhamby@pureturfllc.com') { setSignupErr('Access is currently restricted'); return; }
     if (!/^\d{4}$/.test(signupPin)) { setSignupErr('PIN must be 4 digits.'); return; }
     if (signupPin !== signupPin2) { setSignupErr('PINs do not match.'); return; }
     setSignupBusy(true);
@@ -2107,6 +2175,9 @@ function AppInner() {
                 </div>
                 )}
 
+                <DataHealthBanner liveStats={liveStats} statsLoading={statsLoading}/>
+
+
                 {/* DASHBOARD VIEW */}
                 <div className="dash-col" style={{display: mainView === 'dashboard' ? undefined : 'none'}}>
                 <div className="dash-scroll" key={dateRange}>
@@ -2127,7 +2198,7 @@ function AppInner() {
                           <div className={`mc-goal-ctx mc-goal-${getTileGoalContext(visibleTiles[0].key).status}`}>{getTileGoalContext(visibleTiles[0].key).pct}% of {getTileGoalContext(visibleTiles[0].key).label} target</div>
                         )}
                         <div className="mc-footer">
-                          <span>{statsLoading ? 'Loading…' : liveStats?.[visibleTiles[0].key] ? 'Live data · click for breakdown' : liveStats?.errors?.[visibleTiles[0].key] ? `⚠ ${liveStats.errors[visibleTiles[0].key]}` : 'Click for live breakdown'}</span>
+                          <span>{statsLoading ? 'Loading…' : liveStats?.[visibleTiles[0].key] ? 'Live data · click for breakdown' : liveStats?.errors?.[visibleTiles[0].key] ? `⚠ ${SOURCE_LABELS[visibleTiles[0].key] || 'Data'} unavailable` : 'Click for live breakdown'}</span>
                           <div className="mc-arrow"><Icon name="arrowR" size={12}/></div>
                         </div>
                       </div>

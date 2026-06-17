@@ -1,55 +1,11 @@
 // Pure Turf AI — Dashboard Stats + Goals Data Function
+import {
+  PIPELINE_2026_SALES, DEAL_STAGE_NAMES, DEAL_STAGES_WON, DEAL_STAGES_LOST, EARLY_STAGES,
+  OWNER_NAMES, CLOSE_RATE_EXCLUDED, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange,
+} from './_shared/crm.mjs';
+
 const WINDSOR_KEY   = process.env.WINDSOR_API_KEY;
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
-
-const EXCLUDED_CAMPAIGNS = ['mosquito', 'pmax - mosquito', 'pmax mosquito'];
-
-const DEAL_STAGES_WON  = ['1271775089'];
-const DEAL_STAGES_LOST = ['1271775090'];
-const DEAL_STAGE_NAMES = {
-  '1271775084': 'Ready to Contact',
-  '1308218008': 'Attempting to Contact',
-  '1271775085': 'Estimate Sent',
-  '1271775089': 'Closed Won',
-  '1271775090': 'Closed Lost',
-};
-const OWNER_NAMES = {
-  '81719066': 'Chris Kleeman',  '82036260': 'Beth Dent',
-  '82063761': 'Daniel Anderson','81847128': 'Kaley Brownlee',
-  '82036049': 'Stuart Chandler','81693514': 'Kurt Dryden',
-  '81719004': 'Wyatt Raines',   '82036368': 'Ashley Thomas',
-  '83335372': 'Nicole McCutcheon',
-};
-
-// Reps excluded from aggregate close rate (still shown individually, flagged)
-const CLOSE_RATE_EXCLUDED = {
-  '81693514': 'Sales manager',       // Kurt Dryden
-  '81719004': 'Commercial sales',    // Wyatt Raines
-};
-
-// Non-sales staff — completely hidden from rep leaderboard
-const NON_SALES_STAFF = new Set([
-  '82036260',  // Beth Dent (admin/scheduler)
-  '82036368',  // Ashley Thomas (admin)
-  '83335372',  // Nicole McCutcheon (admin)
-  '82036049',  // Stuart Chandler (CSM)
-]);
-
-function getDateRange(rangeKey) {
-  const today = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  const date_to = fmt(today);
-  let date_from;
-  switch (rangeKey) {
-    case '7d':  { const d = new Date(today); d.setDate(d.getDate()-6);  date_from = fmt(d); break; }
-    case '30d': { const d = new Date(today); d.setDate(d.getDate()-29); date_from = fmt(d); break; }
-    case '90d': { const d = new Date(today); d.setDate(d.getDate()-89); date_from = fmt(d); break; }
-    case 'ytd': { date_from = `${today.getFullYear()}-01-01`; break; }
-    default:    { const t = today; date_from = `${t.getFullYear()}-${pad(t.getMonth()+1)}-01`; }
-  }
-  return { date_from, date_to };
-}
 
 async function fetchWindsor(datasource, from, to) {
   const fields = datasource === 'google_my_business'
@@ -62,8 +18,7 @@ async function fetchWindsor(datasource, from, to) {
 }
 
 async function fetchHubSpotDeals(date_from) {
-  const PIPELINE_2026_SALES = '853190025';
-  const props = 'dealname,amount,dealstage,pipeline,closedate,createdate,hubspot_owner_id';
+  const props = 'dealname,amount,dealstage,pipeline,closedate,createdate,hubspot_owner_id,true_lead_source';
 
   // Fetch pipeline stage definitions in parallel
   const stageMapPromise = fetch(`https://api.hubapi.com/crm/v3/pipelines/deals/${PIPELINE_2026_SALES}`, {
@@ -112,7 +67,6 @@ async function fetchHubSpotDeals(date_from) {
 
   const newLeads    = deals.filter(d => d.properties.createdate >= date_from).length;
   // Active leads = deals in early stages (not yet won/lost) — useful when newLeads is 0 at start of period
-  const EARLY_STAGES = new Set(['1271775084', '1308218008', '1271775085']); // Ready, Attempting, Estimate Sent
   const activeLeads = deals.filter(d => EARLY_STAGES.has(d.properties.dealstage)).length;
   const wonDeals    = deals.filter(isWon);
   const lostDeals   = deals.filter(isLost);
@@ -188,7 +142,28 @@ async function fetchHubSpotDeals(date_from) {
       created: d.properties.createdate?.slice(0, 10),
     }));
 
-  return { total: deals.length, totalAll: allDeals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals };
+  // Lead source attribution — leads created this period grouped by True Lead Source.
+  // Blank/unset values surface as "Unassigned" so the tagging gap stays visible.
+  const newLeadDeals = deals.filter(d => d.properties.createdate >= date_from);
+  const bySource = {};
+  newLeadDeals.forEach(d => {
+    const src = d.properties.true_lead_source?.trim() || 'Unassigned';
+    bySource[src] = (bySource[src] || 0) + 1;
+  });
+  const leadSources = Object.entries(bySource)
+    .map(([source, count]) => ({
+      source,
+      count,
+      pct: newLeadDeals.length ? Math.round((count / newLeadDeals.length) * 100) : 0,
+      unassigned: source === 'Unassigned',
+    }))
+    .sort((a, b) => {
+      if (a.unassigned !== b.unassigned) return a.unassigned ? 1 : -1; // Unassigned last
+      return b.count - a.count;
+    });
+  const taggedLeads = newLeadDeals.length - (bySource['Unassigned'] || 0);
+
+  return { total: deals.length, totalAll: allDeals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads };
 }
 
 // In-memory result cache. Netlify reuses warm function instances, so this persists
@@ -333,7 +308,7 @@ export const handler = async (event) => {
   if (hubspotResult.status === 'fulfilled') {
     const h = hubspotResult.value;
     stats.pipeline = { total: h.total, sub: `deals · ${new Date().getFullYear()}`, dir: '' };
-    stats.hubspot  = { newLeads: h.newLeads, revenue: h.revenue, closeRate: h.closeRate, wonCount: h.wonCount, lostCount: h.lostCount, stageBreakdown: h.stageBreakdown, repLeaderboard: h.repLeaderboard, recentDeals: h.recentDeals };
+    stats.hubspot  = { newLeads: h.newLeads, revenue: h.revenue, closeRate: h.closeRate, wonCount: h.wonCount, lostCount: h.lostCount, stageBreakdown: h.stageBreakdown, repLeaderboard: h.repLeaderboard, recentDeals: h.recentDeals, leadSources: h.leadSources, taggedLeads: h.taggedLeads };
   } else { stats.errors.hubspot = hubspotResult.reason?.message; }
 
   const googleSpend = stats.google?.spend || 0;

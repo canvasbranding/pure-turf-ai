@@ -965,6 +965,15 @@ html[data-theme="dark"] .dv-kpi-card { background:rgba(255,255,255,0.04); }
 
 /* Section label */
 .dv-section-label { font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:600; margin-bottom:9px; }
+.dv-section-note { float:right; letter-spacing:0; text-transform:none; color:var(--text-3); font-weight:500; opacity:0.8; }
+
+/* Data-health strip — surfaces failed/stale data sources */
+.data-health { font-size:11px; line-height:1.4; padding:7px 12px; border-radius:9px; margin:0 0 10px; display:flex; align-items:center; gap:7px; }
+.data-health-ok { color:var(--text-3); background:transparent; padding:2px 2px 8px; font-weight:500; }
+.data-health-warn { color:#9a5b00; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); }
+.data-health-warn strong { font-weight:700; }
+.dh-dot { font-size:12px; flex-shrink:0; }
+html[data-theme="dark"] .data-health-warn { color:#fbbf24; background:rgba(245,158,11,0.1); border-color:rgba(245,158,11,0.25); }
 
 /* Table */
 .dv-table { background:var(--card); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; box-shadow:var(--shadow-sm); margin-bottom:20px; }

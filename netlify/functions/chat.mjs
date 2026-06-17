@@ -1,5 +1,6 @@
 // Pure Turf AI — Netlify Serverless Function
 import Anthropic from '@anthropic-ai/sdk';
+import { DEAL_STAGE_NAMES, OWNER_NAMES, getDateRange } from './_shared/crm.mjs';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const WINDSOR_KEY   = process.env.WINDSOR_API_KEY;
@@ -21,22 +22,6 @@ function logQuery(email, name, message) {
     body: JSON.stringify({ user_email: email || 'unknown', user_name: name || 'Unknown', message: (message || '').slice(0, 2000) }),
   }).catch(() => {}); // silent fail — never block chat
 }
-
-// Stage & owner maps — kept for enrichment
-const DEAL_STAGES = {
-  '1271775084': 'Ready to Contact',
-  '1308218008': 'Attempting to Contact',
-  '1271775085': 'Estimate Sent',
-  '1271775089': 'Closed Won',
-  '1271775090': 'Closed Lost',
-};
-const OWNER_NAMES = {
-  '81719066': 'Chris Kleeman',  '82036260': 'Beth Dent',
-  '82063761': 'Daniel Anderson','81847128': 'Kaley Brownlee',
-  '82036049': 'Stuart Chandler','81693514': 'Kurt Dryden',
-  '81719004': 'Wyatt Raines',   '82036368': 'Ashley Thomas',
-  '83335372': 'Nicole McCutcheon',
-};
 
 // ── TOOL DEFINITIONS ──────────────────────────────────────────────────────
 const tools = [
@@ -85,24 +70,6 @@ const tools = [
 ];
 
 // ── TOOL IMPLEMENTATIONS ──────────────────────────────────────────────────
-function getDateRange(rangeKey) {
-  const today = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  const date_to = fmt(today);
-  let date_from;
-  switch (rangeKey) {
-    case '7d':  { const d = new Date(today); d.setDate(d.getDate()-6); date_from = fmt(d); break; }
-    case '30d': { const d = new Date(today); d.setDate(d.getDate()-29); date_from = fmt(d); break; }
-    case '90d': { const d = new Date(today); d.setDate(d.getDate()-89); date_from = fmt(d); break; }
-    case 'ytd': { date_from = `${today.getFullYear()}-01-01`; break; }
-    default:    { date_from = `${today.getFullYear()}-${pad(today.getMonth()+1)}-01`; } // MTD
-  }
-  return { date_from, date_to };
-}
-
-// Campaigns to exclude from Google Ads data
-const EXCLUDED_CAMPAIGNS = ['mosquito', 'pmax - mosquito', 'pmax mosquito'];
 
 async function getWindsor(datasource, date_from, date_to, rangeKey) {
   const d = rangeKey ? getDateRange(rangeKey) : getDateRange('mtd');
@@ -120,7 +87,7 @@ async function getWindsor(datasource, date_from, date_to, rangeKey) {
 
 // Always use simple GET + client-side filter — avoids search endpoint 400 errors
 async function getPipelineDeals(pipeline_name = null, limit = 100, owner_name = null) {
-  const props = 'dealname,amount,dealstage,pipeline,hubspot_owner_id,closedate,createdate';
+  const props = 'dealname,amount,dealstage,pipeline,hubspot_owner_id,closedate,createdate,true_lead_source';
 
   // Paginate through deals (up to 3 pages = 300 deals — kept small for 26s timeout)
   let allResults = [];
@@ -179,18 +146,20 @@ async function getPipelineDeals(pipeline_name = null, limit = 100, owner_name = 
     id:          deal.id,
     name:        deal.properties.dealname,
     amount:      deal.properties.amount ? parseFloat(deal.properties.amount) : null,
-    stage:       DEAL_STAGES[deal.properties.dealstage] || deal.properties.dealstage,
+    stage:       DEAL_STAGE_NAMES[deal.properties.dealstage] || deal.properties.dealstage,
     pipeline_id: deal.properties.pipeline,
     owner:       OWNER_NAMES[deal.properties.hubspot_owner_id] || 'Unassigned',
+    source:      deal.properties.true_lead_source || 'Unassigned',
     closedate:   deal.properties.closedate,
     createdate:  deal.properties.createdate,
   }));
 
-  const byStage = {}, byOwner = {};
+  const byStage = {}, byOwner = {}, bySource = {};
   let totalAmount = 0;
   enriched.forEach(d => {
     if (d.stage) byStage[d.stage] = (byStage[d.stage] || 0) + 1;
     if (d.owner) byOwner[d.owner] = (byOwner[d.owner] || 0) + 1;
+    bySource[d.source] = (bySource[d.source] || 0) + 1;
     if (d.amount) totalAmount += d.amount;
   });
 
@@ -200,6 +169,7 @@ async function getPipelineDeals(pipeline_name = null, limit = 100, owner_name = 
     filter: pipeline_name || 'all pipelines',
     byStage,
     byOwner,
+    bySource,
     total_value: totalAmount > 0 ? `$${Math.round(totalAmount).toLocaleString()}` : 'N/A',
     sample_deals: enriched.slice(0, 15),
   };
@@ -266,7 +236,7 @@ You have live access to:
 - Google Ads (Windsor.ai) — spend, conversions, CPA by campaign
 - Meta Ads (Windsor.ai) — spend, CPM, reach
 - Google Business Profile (Windsor.ai) — views, calls, directions, clicks
-- HubSpot CRM — deals, pipeline stages, rep performance
+- HubSpot CRM — deals, pipeline stages, rep performance, and lead-source attribution (True Lead Source)
 ${groundTruth}
 
 Rules:
@@ -279,6 +249,7 @@ Rules:
 - Format with clear sections/headings when the answer is multi-topic.
 - NEVER explain tool limitations, API constraints, or how you got the data. Just present the answer confidently.
 - If data is incomplete, give the best answer from what's available without caveats.
+- Lead source: "where did leads come from?" is answered by True Lead Source on deals (liveStats.hubspot.leadSources, or bySource from the pipeline tool). "Unassigned" means the deal was never tagged — it is NOT a channel. When a large share is Unassigned, say so plainly and flag it as a data-tagging gap to fix, and base any source percentages on the tagged leads.
 
 Company context:
 - Pure Turf LLC, Middle Tennessee. Services: lawn care, mosquito control.
