@@ -1165,6 +1165,16 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
     setUserMsg('User re-enabled.');
   };
 
+  const doForceLogout = async () => {
+    if (!window.confirm('Sign out everyone (except you) and make them re-enter their PIN? Open sessions end within a minute.')) return;
+    setUserMsg('');
+    await fetch('/.netlify/functions/auth', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'force-logout', requester_email: currentUser.email }),
+    });
+    setUserMsg('Everyone else will be signed out within a minute.');
+  };
+
 
   const availableTabs = [
     ...(canSetCompGoals ? [{ id:'goals',  label:'Company Goals' }] : []),
@@ -1516,6 +1526,15 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
                   })}
                 </div>
               )}
+
+              {/* Force everyone to re-login */}
+              <div className="admin-section-hdr" style={{marginTop:28,marginBottom:12}}>
+                <div className="admin-section-label">Security</div>
+                <div className="admin-section-hint">End every open session except yours — they’ll re-enter their PIN.</div>
+              </div>
+              <button className="admin-action-btn admin-action-reject" style={{alignSelf:'flex-start'}} onClick={doForceLogout}>
+                Force everyone to re-login
+              </button>
             </div>
           )}
 
@@ -2052,6 +2071,7 @@ function AppInner() {
   const float3Ref  = useRef(null);
   const themeBtnRef= useRef(null);
   const stepRef    = useRef(null);
+  const sessionStartRef = useRef(0); // server time (ms) when this session logged in
 
   const rangeDesc = DATE_RANGES[dateRange]?.desc || 'this month';
 
@@ -2219,7 +2239,8 @@ function AppInner() {
 
   const delKey = useCallback(() => { setPin(p => p.slice(0, -1)); setPinErr(false); }, []);
 
-  const doLogin = useCallback((user) => {
+  const doLogin = useCallback((user, serverTime) => {
+    sessionStartRef.current = serverTime || Date.now();
     saveLastUser(user.email);
     if (loginRef.current) {
       loginRef.current.style.transition = 'opacity 0.5s, transform 0.5s';
@@ -2250,7 +2271,7 @@ function AppInner() {
           body: JSON.stringify({ action: 'set-pin', email: selectedUser?.email, pin: p }),
         });
         const data = await res.json();
-        if (res.ok && data.ok) { setPinMode('login'); setFirstPin(''); doLogin(data.user); return; }
+        if (res.ok && data.ok) { setPinMode('login'); setFirstPin(''); doLogin(data.user, data.server_time); return; }
         setEmailErr(data.error || 'Could not set PIN.'); setPin(''); setPinErr(true); setFirstPin(''); setPinMode('login'); shake();
       } catch { setEmailErr('Network error — try again.'); setPin(''); setPinErr(true); shake(); }
       return;
@@ -2262,7 +2283,7 @@ function AppInner() {
         body: JSON.stringify({ action: 'login', email: selectedUser?.email, pin: p }),
       });
       const data = await res.json();
-      if (res.ok && data.ok) { doLogin(data.user); return; }
+      if (res.ok && data.ok) { doLogin(data.user, data.server_time); return; }
       if (data.needsPinSetup) { setPinMode('create'); setPin(''); setPinErr(false); setEmailErr(''); return; }
       setPin(''); setPinErr(true); if (data.error) setEmailErr(data.error); shake();
     } catch {
@@ -2387,6 +2408,32 @@ function AppInner() {
     setLoginStep('email'); setSelectedUser(null); setPin(''); setPinErr(false);
     animateStep();
   }, []);
+
+  // ── FORCE-LOGOUT POLL ────────────────────────────────────────────────
+  // An admin (or a deploy) can bump the server "session epoch". Any session
+  // older than it is signed out within one poll. The current admin who triggers
+  // it is exempt so they aren't kicked out of their own dashboard.
+  useEffect(() => {
+    if (screen !== 'app' || !currentUser) return;
+    if (currentUser.email === 'dhamby@pureturfllc.com') return; // never force-logout the admin who triggers it
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await fetch('/.netlify/functions/auth', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'session-epoch' }),
+        });
+        const d = await res.json();
+        if (!cancelled && d.ok && sessionStartRef.current && d.epoch > sessionStartRef.current) {
+          signOut();
+          setEmailErr('You’ve been signed out. Please log in again.');
+        }
+      } catch {}
+    };
+    check();
+    const id = setInterval(check, 45000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [screen, currentUser, signOut]);
 
   // ── MOBILE TAB HANDLER ──────────────────────────────────────────────
   const handleMobileTab = useCallback((tab) => {

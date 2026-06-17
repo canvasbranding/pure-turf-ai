@@ -10,6 +10,24 @@ const json = (status, obj) => new Response(JSON.stringify(obj), { status, header
 // ── Storage: Netlify Blobs (built into the site — no external DB) ────────────
 // One blob per user, keyed by lowercased email. id === email everywhere.
 function store() { return getStore({ name: 'pt-users', consistency: 'strong' }); }
+
+// ── Session epoch (force-logout) ─────────────────────────────────────────────
+// Any session whose baseline (server time at login) is older than the epoch is
+// forced to sign out. BUILD_EPOCH is a hard floor bumped at deploy time, so a
+// deploy can invalidate every session in flight; an admin can also bump it live
+// via the force-logout action (stored in Blobs). Sessions are compared in SERVER
+// time (returned at login) to avoid client-clock skew.
+const BUILD_EPOCH = 1781731833708; // 2026-06-17T21:30:33Z — bump to force everyone to re-login on deploy
+function metaStore() { return getStore({ name: 'pt-meta', consistency: 'strong' }); }
+async function getSessionEpoch() {
+  try { const v = await metaStore().get('session_epoch', { type: 'json' }); return Math.max(BUILD_EPOCH, v?.epoch || 0); }
+  catch { return BUILD_EPOCH; }
+}
+async function bumpSessionEpoch() {
+  const epoch = Date.now();
+  try { await metaStore().setJSON('session_epoch', { epoch }); } catch {}
+  return Math.max(BUILD_EPOCH, epoch);
+}
 async function getUser(email) {
   if (!email) return null;
   try { return await store().get(email.toLowerCase(), { type: 'json' }); } catch { return null; }
@@ -133,7 +151,7 @@ export default async (req) => {
       const r = roster || user;
       // Successful login clears any failed-attempt / lockout state.
       await putUser(e, { ...user, name: r.name, role: r.role, title: r.title, initials: r.initials, last_login: now, failed_attempts: 0, lockout_until: null });
-      return json(200, { ok: true, user: { email: e, name: r.name, role: r.role, initials: r.initials, title: r.title } });
+      return json(200, { ok: true, server_time: Date.now(), user: { email: e, name: r.name, role: r.role, initials: r.initials, title: r.title } });
     }
 
     // ── SET PIN (first-time claim, or after an admin reset) ──────────────────
@@ -160,7 +178,19 @@ export default async (req) => {
         last_login: now,
       };
       await putUser(e, merged);
-      return json(200, { ok: true, user: { email: e, name: merged.name, role: merged.role, initials: merged.initials, title: merged.title } });
+      return json(200, { ok: true, server_time: Date.now(), user: { email: e, name: merged.name, role: merged.role, initials: merged.initials, title: merged.title } });
+    }
+
+    // ── SESSION EPOCH: clients poll this to know if they've been force-logged-out ──
+    if (action === 'session-epoch') {
+      return json(200, { ok: true, epoch: await getSessionEpoch() });
+    }
+
+    // ── ADMIN: force everyone to re-login (bumps the session epoch) ───────────
+    if (action === 'force-logout') {
+      const { requester_email } = body;
+      if (!(await requireAdmin(requester_email))) return json(403, { error: 'Unauthorized' });
+      return json(200, { ok: true, epoch: await bumpSessionEpoch() });
     }
 
     // ── ADMIN: reset a user's PIN (they re-claim on next login) ───────────────
