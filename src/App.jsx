@@ -246,7 +246,6 @@ const ALL_TILES = [
 const ALL_ACTIONS = [
   { icon:'briefing', label:'Monday Briefing', sub:'Weekly performance overview',   perm:'mondayBrief', prompt:'Give me my Monday morning marketing briefing — Google Ads, Meta, and GBP performance overview.' },
   { icon:'chart',    label:'Google Ads',      sub:'Campaign spend & CPA breakdown', perm:'googleAds',   prompt:'Break down Google Ads campaign performance this month — spend, conversions, and CPA by campaign.' },
-  { icon:'meta',     label:'Meta vs Google',  sub:'Blended media efficiency',       perm:'metaAds',     prompt:'Compare Meta and Google performance this month — where should we shift budget?' },
   { icon:'gbp',      label:'GBP Insights',    sub:'Local search performance',       perm:'gbp',         prompt:'What does Google Business Profile look like this week — views, calls, directions, clicks?' },
   { icon:'pipeline', label:'Pipeline',        sub:'Deals by stage and rep',         perm:'pipeline',    prompt:'Give me a full pipeline breakdown — deals by stage, by rep, and what needs attention.' },
 ];
@@ -1358,17 +1357,18 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
                     <div className="au-col-status">Status</div>
                     <div className="au-col-action"/>
                   </div>
-                  {allUsers.filter(u => u.email !== currentUser?.email).map(u => {
+                  {allUsers.map(u => {
                     const lastLogin = u.last_login ? new Date(u.last_login).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'Never';
                     const isActive = u.status === 'active';
                     const notSetUp = u.status === 'not_set_up';
                     const isDisabled = u.status === 'disabled';
+                    const isSelf = u.email === currentUser?.email;
                     return (
                       <div key={u.id} className={`admin-user-row${!isActive?' dimmed':''}`}>
                         <div className="au-col-user">
                           <div className="perm-av" style={{width:30,height:30,fontSize:10}}>{u.initials || u.name?.slice(0,2).toUpperCase()}</div>
                           <div>
-                            <div className="perm-name">{u.name}</div>
+                            <div className="perm-name">{u.name}{isSelf && <span className="rep-tag">You</span>}</div>
                             <div className="perm-role" style={{fontSize:10}}>{u.email}</div>
                           </div>
                         </div>
@@ -1385,7 +1385,8 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
                         <div className="au-col-action">
                           {isActive && (<>
                             <button className="admin-action-btn" style={{fontSize:10,padding:'3px 10px',marginRight:6}} onClick={() => doResetPin(u.id)}>Reset PIN</button>
-                            <button className="admin-action-btn admin-action-reject" style={{fontSize:10,padding:'3px 10px'}} onClick={() => doDisable(u.id)}>Disable</button>
+                            {/* Can't disable your own account — prevents locking yourself out. */}
+                            {!isSelf && <button className="admin-action-btn admin-action-reject" style={{fontSize:10,padding:'3px 10px'}} onClick={() => doDisable(u.id)}>Disable</button>}
                           </>)}
                           {isDisabled && (
                             <button className="admin-action-btn admin-action-approve" style={{fontSize:10,padding:'3px 10px'}} onClick={() => doEnable(u.id)}>Enable</button>
