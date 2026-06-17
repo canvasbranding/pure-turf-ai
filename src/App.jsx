@@ -1706,6 +1706,8 @@ function SearchVisibilityView({ sendMessage }) {
 
   const g = data?.gsc, local = data?.local;
   const fmtN = n => (n ?? 0).toLocaleString();
+  // Compact for narrow KPI cards: full with commas under 10k, else 231K / 1.2M.
+  const fmtK = n => { if (n == null) return '–'; const a = Math.abs(n); if (a >= 1e6) return `${(n/1e6).toFixed(1)}M`; if (a >= 1e4) return `${Math.round(n/1e3)}K`; return n.toLocaleString(); };
   const delta = local?.delta;
   const updated = data?.fetchedAt ? relTime(data.fetchedAt) : null;
 
@@ -1758,8 +1760,8 @@ function SearchVisibilityView({ sendMessage }) {
           <div className="dv-section-label" style={{marginTop:18}}>Website Search · last {g?.periodDays || 90} days</div>
           <div className="dv-kpi-row">
             {[
-              { label:'Clicks',      val: g ? fmtN(g.clicks) : '–' },
-              { label:'Impressions', val: g ? fmtN(g.impressions) : '–' },
+              { label:'Clicks',      val: g ? fmtK(g.clicks) : '–' },
+              { label:'Impressions', val: g ? fmtK(g.impressions) : '–' },
               { label:'CTR',         val: g ? `${g.ctr}%` : '–' },
               { label:'Avg Position',val: g ? g.position : '–' },
             ].map(k => (
