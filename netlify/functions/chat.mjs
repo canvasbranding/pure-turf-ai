@@ -195,6 +195,7 @@ You have live access to:
 - Google Ads (Windsor.ai) — spend, conversions, CPA by campaign
 - Google Business Profile (Windsor.ai) — views, calls, directions, clicks
 - HubSpot CRM — deals, pipeline stages, rep performance, and lead-source attribution (True Lead Source)
+- QuickBooks financials (liveStats.finance, YTD) — revenue, COGS, gross profit, operating expenses, net income, margin, A/R. Only discuss finances with admin/owner/executive users.
 ${groundTruth}
 
 Rules:

@@ -3,6 +3,7 @@ import {
   PIPELINE_2026_SALES, PIPELINE_2026_COMMERCIAL, ACTIVE_PIPELINES, DEAL_STAGE_NAMES, DEAL_STAGES_WON, DEAL_STAGES_LOST,
   OWNER_NAMES, CLOSE_RATE_EXCLUDED, REP_NOTES, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, fetchDealsInPipelines, leadSourceOf, hubspotGet,
 } from './_shared/crm.mjs';
+import { fetchQuickBooks } from './_shared/quickbooks.mjs';
 
 const WINDSOR_KEY   = process.env.WINDSOR_API_KEY;
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
@@ -189,17 +190,6 @@ export const handler = async (event) => {
   const { date_from, date_to } = getDateRange(rangeKey);
   const cdnHeaders = { 'Cache-Control': 'public, max-age=0, must-revalidate', 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=180, stale-while-revalidate=600' };
 
-  // Temporary probe: Windsor QuickBooks (/quickbooks endpoint, report-prefixed fields).
-  if (event.queryStringParameters?.probe === 'qb') {
-    const qp = event.queryStringParameters;
-    const fields = qp.fields || 'accounts__name,accounts__accounttype,accounts__accountsubtype,accounts__classification,accounts__currentbalance';
-    const sel = qp.sel || 'kurt@pureturfllc.com_184633936';
-    const dp = qp.dp || 'last_year';
-    const purl = `https://connectors.windsor.ai/quickbooks?api_key=${WINDSOR_KEY}&date_preset=${dp}&fields=${encodeURIComponent(fields)}&select_accounts=${encodeURIComponent(sel)}`;
-    const pr = await fetch(purl).catch(e => ({ status:0, text: async () => e.message }));
-    const ptext = await pr.text();
-    return { statusCode: 200, headers: { ...headers, 'Cache-Control':'no-store' }, body: JSON.stringify({ status: pr.status, sample: ptext.slice(0, 2000) }) };
-  }
 
   // Fast path: recent in-memory result on this warm instance. Steady-state speed comes
   // from Netlify's durable CDN cache (headers below) — kept fresh by keep-warm's warm=1
@@ -212,11 +202,12 @@ export const handler = async (event) => {
 
   // Meta (facebook_ads) disabled — that Windsor connector slot was reallocated to
   // QuickBooks. Re-add fetchWindsor('facebook_ads', …) here to restore Meta.
-  const [googleResult, gbpResult, hubspotResult, rgResult] = await Promise.allSettled([
+  const [googleResult, gbpResult, hubspotResult, rgResult, financeResult] = await Promise.allSettled([
     fetchWindsor('google_ads', date_from, date_to),
     fetchWindsor('google_my_business', date_from, date_to),
     fetchHubSpotDeals(date_from),
     fetchRGServices(HUBSPOT_TOKEN, date_from),
+    fetchQuickBooks(WINDSOR_KEY, 'this_year'), // finance tiles are always YTD (P&L is annual)
   ]);
 
   const stats = { dateRange: rangeKey, dateFrom: date_from, dateTo: date_to, fetchedAt: new Date().toISOString(), errors: {} };
@@ -309,6 +300,13 @@ export const handler = async (event) => {
     stats.rgServices = rgResult.value;
   } else {
     stats.errors.rgServices = rgResult.reason?.message;
+  }
+
+  // ── Finance (QuickBooks P&L · YTD) ──────────────────────────
+  if (financeResult.status === 'fulfilled') {
+    stats.finance = financeResult.value;
+  } else {
+    stats.errors.finance = financeResult.reason?.message;
   }
 
   // Data-sanity guard: if the deal count collapsed versus the last good reading, the

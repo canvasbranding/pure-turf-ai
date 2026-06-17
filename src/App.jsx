@@ -35,6 +35,7 @@ const Icon = ({ name, size = 16 }) => {
     pipeline: <><path d="M3 3h14l-3.5 6v5l-1.5 1.5h-4L6.5 14V9L3 3z" strokeLinejoin="round"/><path d="M6.5 9h7" /></>,
     gbp:      <><circle cx="10" cy="7.5" r="3.5"/><path d="M3.5 19c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6" strokeLinecap="round"/></>,
     meta:     <><circle cx="10" cy="10" r="7.5"/><path d="M6.5 8h4l1.5 5h3" strokeLinecap="round" strokeLinejoin="round"/></>,
+    finance:  <><path d="M10 2.5v15" strokeLinecap="round"/><path d="M13.5 5.5C13.5 4.2 11.9 3.5 10 3.5S6.5 4.2 6.5 6s1.6 2.3 3.5 2.8 3.5 1 3.5 2.7-1.6 2.5-3.5 2.5-3.5-.8-3.5-2.2" strokeLinecap="round" strokeLinejoin="round"/></>,
     admin:    <><rect x="2.5" y="2.5" width="6" height="6" rx="1.5"/><rect x="11.5" y="2.5" width="6" height="6" rx="1.5"/><rect x="2.5" y="11.5" width="6" height="6" rx="1.5"/><rect x="11.5" y="11.5" width="6" height="6" rx="1.5"/></>,
     send:     <path d="M17.5 10L3 10M17.5 10L11 3.5M17.5 10L11 16.5" strokeLinecap="round" strokeLinejoin="round"/>,
     arrowR:   <path d="M3.5 10h13M12 4.5L17.5 10 12 15.5" strokeLinecap="round" strokeLinejoin="round"/>,
@@ -69,14 +70,14 @@ const GOAL_ADMIN_EMAILS = ['david@pureturfllc.com', 'kdryden@pureturfllc.com', '
 const TEAM_GOALS_EMAILS = ['david@pureturfllc.com', 'kdryden@pureturfllc.com', 'rbone@pureturfllc.com', 'dhamby@pureturfllc.com'];
 
 const DEFAULT_PERMISSIONS = {
-  admin:        { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: true  },
-  owner:        { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: false },
-  marketing:    { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: false },
-  executive:    { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  mondayBrief: true,  adminPanel: false, goalAdmin: true,  teamGoals: true,  manageUsers: false },
-  sales_manager:{ googleAds: false, metaAds: false, gbp: false, pipeline: true,  mondayBrief: false, adminPanel: true,  goalAdmin: false, teamGoals: true,  manageUsers: false },
-  sales:        { googleAds: false, metaAds: false, gbp: false, pipeline: true,  mondayBrief: false, adminPanel: false, goalAdmin: false, teamGoals: false, manageUsers: false },
+  admin:        { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: true,  mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: true  },
+  owner:        { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: true,  mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: false },
+  marketing:    { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: false },
+  executive:    { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: true,  mondayBrief: true,  adminPanel: false, goalAdmin: true,  teamGoals: true,  manageUsers: false },
+  sales_manager:{ googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: true,  goalAdmin: false, teamGoals: true,  manageUsers: false },
+  sales:        { googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: false, goalAdmin: false, teamGoals: false, manageUsers: false },
 };
-const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', mondayBrief:'Mon. Brief', adminPanel:'Admin Panel', goalAdmin:'Goal Admin', teamGoals:'Team Goals', manageUsers:'Manage Users' };
+const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', finance:'Finance', mondayBrief:'Mon. Brief', adminPanel:'Admin Panel', goalAdmin:'Goal Admin', teamGoals:'Team Goals', manageUsers:'Manage Users' };
 const ROLE_LABELS = { admin:'Admin', owner:'Owner', marketing:'Marketing', executive:'Executive', sales_manager:'Sales Mgr', sales:'Sales' };
 
 // Friendly names for data sources — used by the data-health banner and tile error states
@@ -252,6 +253,11 @@ const ALL_TILES = [
   { key:'activeCustomers',lbl:'Active Customers', val:0, prefix:'', sub:'total book',   dir:'',   perm:'pipeline', group:'Customers' },
   { key:'cancellations',lbl:'Cancellations',val:0, prefix:'', sub:'this period',        dir:'dn', perm:'pipeline', group:'Customers' },
   { key:'adSpend',    lbl:'Total Ad Spend', val:0, prefix:'$', sub:'paid search',       dir:'',   perm:'googleAds', group:'Marketing' },
+  // Finance (QuickBooks P&L · YTD) — restricted to admin/owner/executive.
+  { key:'qbRevenue',  lbl:'Revenue · YTD',   val:0, prefix:'$', sub:'QuickBooks income',  dir:'up', perm:'finance', group:'Finance' },
+  { key:'qbGrossProfit',lbl:'Gross Profit · YTD', val:0, prefix:'$', sub:'revenue − COGS', dir:'',  perm:'finance', group:'Finance' },
+  { key:'qbNetIncome',lbl:'Net Income · YTD',val:0, prefix:'$', sub:'bottom line',        dir:'',   perm:'finance', group:'Finance' },
+  { key:'qbMargin',   lbl:'Net Margin · YTD',val:0, prefix:'',  suffix:'%', sub:'net ÷ revenue', dir:'', perm:'finance', group:'Finance' },
 ];
 const ALL_ACTIONS = [
   { icon:'briefing', label:'Monday Briefing', sub:'Weekly performance overview',   perm:'mondayBrief', prompt:'Give me my Monday morning marketing briefing — Google Ads and GBP performance overview.' },
@@ -1609,6 +1615,83 @@ function ScorecardView({ liveStats, dateRange, sendMessage }) {
   );
 }
 
+// ── FINANCE (QuickBooks P&L via Windsor) ────────────────────────────────
+function FinanceView({ sendMessage }) {
+  const [period, setPeriod] = React.useState('this_year');
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    let cancelled = false; setLoading(true);
+    fetch(`/.netlify/functions/finance?period=${period}`)
+      .then(r => r.json()).then(d => { if (!cancelled) setData(d); })
+      .catch(() => {}).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [period]);
+
+  const fmt$ = v => { if (v == null) return '–'; const a = Math.abs(v); const s = v < 0 ? '-' : ''; return a >= 1e6 ? `${s}$${(a/1e6).toFixed(2)}M` : a >= 1e3 ? `${s}$${(a/1e3).toFixed(0)}k` : `${s}$${Math.round(a)}`; };
+  const periodLabel = { this_month:'This Month', this_year:'Year to Date', last_year:'Last Year' }[period];
+  const f = data && !data.error ? data : null;
+  const lines = f ? [
+    { label:'Revenue', val:f.revenue, bold:true },
+    { label:'Cost of Goods Sold', val:-f.cogs },
+    { label:'Gross Profit', val:f.grossProfit, bold:true },
+    { label:'Operating Expenses', val:-f.operatingExpenses },
+    { label:'Net Operating Income', val:f.netOperatingIncome, bold:true },
+    { label:'Other Income', val:f.otherIncome },
+    { label:'Other Expenses', val:-f.otherExpenses },
+    { label:'Net Income', val:f.netIncome, bold:true, big:true },
+  ] : [];
+
+  return (
+    <div className="data-view-scroll">
+      <div className="dv-header">
+        <div><div className="dv-eyebrow">QuickBooks · Profit &amp; Loss</div><h2 className="dv-title">Finance</h2></div>
+      </div>
+      <div className="pipe-toggle">
+        {[['this_month','This Month'],['this_year','YTD'],['last_year','Last Year']].map(([p,l]) => (
+          <button key={p} className={`pipe-toggle-btn${period===p?' active':''}`} onClick={() => setPeriod(p)}>{l}</button>
+        ))}
+      </div>
+
+      {loading && <div className="dv-loading-rows">{[1,2,3].map(i=><div key={i} className="dv-row-skel"/>)}</div>}
+
+      {!loading && f && (
+        <>
+          <div className="dv-kpi-row">
+            {[
+              { label:'Revenue', val: fmt$(f.revenue) },
+              { label:'Net Income', val: fmt$(f.netIncome) },
+              { label:'Net Margin', val: f.margin != null ? `${f.margin}%` : '–' },
+              { label:'A/R Outstanding', val: fmt$(f.accountsReceivable) },
+            ].map(k => (
+              <div key={k.label} className="dv-kpi-card"><div className="dv-kpi-label">{k.label}</div><div className="dv-kpi-val">{k.val}</div></div>
+            ))}
+          </div>
+
+          <div className="dv-section-label" style={{marginTop:16}}>Income Statement · {periodLabel}</div>
+          <div className="fin-statement">
+            {lines.map(l => (
+              <div key={l.label} className={`fin-line${l.bold?' fin-bold':''}${l.big?' fin-big':''}`}>
+                <span>{l.label}</span>
+                <span className={l.val < 0 ? 'fin-neg' : ''}>{fmt$(l.val)}</span>
+              </div>
+            ))}
+          </div>
+          {f.cash != null && <div className="sc-note" style={{marginTop:12}}>Cash on hand (bank balances): <strong>{fmt$(f.cash)}</strong></div>}
+        </>
+      )}
+
+      {!loading && !f && <div className="dv-empty" style={{padding:'18px 0'}}>Finance data unavailable{data?.error ? `: ${data.error}` : ''}.</div>}
+
+      <button className="dv-ai-btn" onClick={() => sendMessage(`Give me a financial summary for ${periodLabel} — revenue, gross profit, net income, margin, and what stands out or needs attention.`)}>
+        <span>Ask AI for a financial summary</span>
+        <Icon name="arrowR" size={13}/>
+      </button>
+      <div style={{height:32}}/>
+    </div>
+  );
+}
+
 // ── SEARCH & VISIBILITY (SEO / Local / AEO via Search Atlas) ────────────
 function SearchVisibilityView({ sendMessage }) {
   const [data, setData] = React.useState(null);
@@ -1843,6 +1926,10 @@ function AppInner() {
       case 'newCustomers':    if (rg) { val = rg.newCustomers; sub = 'added this period'; } break;
       case 'activeCustomers': if (rg) { val = rg.totalActive; sub = 'total active book'; } break;
       case 'cancellations':   if (rg) { val = rg.newCancels; sub = 'cancelled this period'; } break;
+      case 'qbRevenue':     { const f = liveStats.finance; if (f) { val = Math.round(f.revenue); } break; }
+      case 'qbGrossProfit': { const f = liveStats.finance; if (f) { val = Math.round(f.grossProfit); } break; }
+      case 'qbNetIncome':   { const f = liveStats.finance; if (f) { val = Math.round(f.netIncome); } break; }
+      case 'qbMargin':      { const f = liveStats.finance; if (f && f.margin != null) { val = f.margin; } break; }
       default: val = tile.val;
     }
     return {
@@ -2411,6 +2498,7 @@ function AppInner() {
                 ...(perms.googleAds ? [{ key:'gads',  icon:'chart',    label:'Google Ads' }] : []),
                 ...(perms.gbp      ? [{ key:'gbp',   icon:'gbp',      label:'GBP'        }] : []),
                 ...(perms.pipeline ? [{ key:'pipe',  icon:'pipeline', label:'Pipeline'   }] : []),
+                ...(perms.finance ? [{ key:'finance', icon:'finance', label:'Finance' }] : []),
                 ...(perms.teamGoals ? [{ key:'score', icon:'briefing', label:'Scorecard' }] : []),
                 ...(perms.teamGoals ? [{ key:'search', icon:'chart', label:'Search & Visibility' }] : []),
               ].map(item => (
@@ -2422,6 +2510,7 @@ function AppInner() {
                     (mainView==='gbp'       && item.key==='gbp') ||
                     (mainView==='pipeline'  && item.key==='pipe') ||
                     (mainView==='scorecard' && item.key==='score') ||
+                    (mainView==='finance'   && item.key==='finance') ||
                     (mainView==='search'    && item.key==='search') ? ' active' : ''}`}
                   title={item.label}
                   onClick={() => {
@@ -2431,6 +2520,7 @@ function AppInner() {
                     else if (item.key === 'gbp')   { setMobileTab('dashboard'); setMainView('gbp'); }
                     else if (item.key === 'pipe')  { setMobileTab('pipeline'); setMainView('pipeline'); }
                     else if (item.key === 'score') { setMobileTab('dashboard'); setMainView('scorecard'); }
+                    else if (item.key === 'finance'){ setMobileTab('dashboard'); setMainView('finance'); }
                     else if (item.key === 'search'){ setMobileTab('dashboard'); setMainView('search'); }
                   }}>
                   <Icon name={item.icon} size={16}/>
@@ -2505,9 +2595,9 @@ function AppInner() {
 
                   {/* Metric cards — grouped: Marketing · Sales · Customers */}
                   {visibleTiles.length > 0 && (() => {
-                    const ERR_SRC = { google:'google', meta:'meta', gbp:'gbp', pipeline:'hubspot', leads:'hubspot', closeRate:'hubspot', revenue:'hubspot', newCustomers:'rgServices', activeCustomers:'rgServices', cancellations:'rgServices' };
+                    const ERR_SRC = { google:'google', meta:'meta', gbp:'gbp', pipeline:'hubspot', leads:'hubspot', closeRate:'hubspot', revenue:'hubspot', newCustomers:'rgServices', activeCustomers:'rgServices', cancellations:'rgServices', qbRevenue:'finance', qbGrossProfit:'finance', qbNetIncome:'finance', qbMargin:'finance' };
                     const tileErrored = (k) => !!liveStats?.errors?.[ERR_SRC[k]];
-                    const ORDER = ['Marketing','Sales','Customers'];
+                    const ORDER = ['Finance','Sales','Customers','Marketing'];
                     const groups = ORDER.map(g => ({ g, tiles: visibleTiles.filter(t => (t.group||'Other') === g) })).filter(x => x.tiles.length);
                     const other = visibleTiles.filter(t => !ORDER.includes(t.group));
                     if (other.length) groups.push({ g:'Other', tiles: other });
@@ -2580,6 +2670,11 @@ function AppInner() {
                 {/* SCORECARD VIEW */}
                 <div className="goals-col" style={{display: mainView === 'scorecard' ? undefined : 'none'}}>
                   {mainView === 'scorecard' && <ScorecardView key={dateRange} liveStats={liveStats} dateRange={dateRange} sendMessage={sendMessage}/>}
+                </div>
+
+                {/* FINANCE VIEW */}
+                <div className="goals-col" style={{display: mainView === 'finance' ? undefined : 'none'}}>
+                  {mainView === 'finance' && <FinanceView sendMessage={sendMessage}/>}
                 </div>
 
                 {/* SEARCH & VISIBILITY VIEW */}

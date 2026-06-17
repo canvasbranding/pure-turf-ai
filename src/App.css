@@ -335,6 +335,13 @@ html[data-theme="dark"] .snav-btn.active {
 .sv-delta.up { color:#10B981; }
 .sv-delta.dn { color:#EF4444; }
 
+/* Finance income statement */
+.fin-statement { display:flex; flex-direction:column; }
+.fin-line { display:flex; align-items:center; justify-content:space-between; padding:9px 4px; font-size:13px; color:var(--text-2); border-bottom:1px solid rgba(127,127,127,0.08); }
+.fin-line.fin-bold { font-weight:700; color:var(--text-1); }
+.fin-line.fin-big { font-size:16px; border-top:2px solid var(--border-md,rgba(127,127,127,0.25)); border-bottom:none; margin-top:2px; padding-top:12px; }
+.fin-neg { color:#EF4444; }
+
 .metric-card {
   border-radius:var(--r-lg); cursor:pointer; will-change:transform;
   background:var(--card); border:1px solid var(--border);
