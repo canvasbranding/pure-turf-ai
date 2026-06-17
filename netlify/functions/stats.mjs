@@ -191,11 +191,8 @@ export const handler = async (event) => {
   if (event.queryStringParameters?.rgprobe === '1') {
     const pr = await fetch('https://api.hubapi.com/crm/v3/properties/2-54724126', { headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` } });
     const pd = await pr.json();
-    const matches = (pd.results || []).filter(p => /customer|account|contact|email|address|residential|commercial|company|property_address|service_address|name/i.test(p.name + ' ' + (p.label || ''))).map(p => ({ name: p.name, label: p.label, type: p.type }));
-    const sr = await fetch(`https://api.hubapi.com/crm/v3/objects/2-54724126?limit=3&properties=name&associations=contacts,companies`, { headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` } });
-    const sd = await sr.json();
-    const assoc = (sd.results || []).map(r => ({ name: r.properties?.name, contacts: r.associations?.contacts?.results?.map(x => x.id), companies: r.associations?.companies?.results?.map(x => x.id) }));
-    return { statusCode: 200, headers: { ...headers, 'Cache-Control':'no-store' }, body: JSON.stringify({ matches: matches.map(m => m.name), assoc }) };
+    const allProps = (pd.results || []).map(p => p.name).filter(n => !n.startsWith('hs_')).sort();
+    return { statusCode: 200, headers: { ...headers, 'Cache-Control':'no-store' }, body: JSON.stringify({ allProps }) };
   }
 
 
