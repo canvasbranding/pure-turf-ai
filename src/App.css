@@ -344,6 +344,11 @@ html[data-theme="dark"] .snav-btn.active {
 .sv-win-star { color:#F5B301; font-size:26px; margin-left:2px; }
 .sv-win-lbl { font-size:11px; color:rgba(238,236,234,0.5); margin-top:8px; }
 
+/* Intentional-pause / info notice */
+.ads-notice { display:flex; align-items:flex-start; gap:9px; padding:11px 14px; margin-bottom:16px; border-radius:10px; font-size:12.5px; line-height:1.45; color:var(--text-1); background:var(--accent-dim,rgba(94,106,210,0.12)); border:1px solid var(--accent-bdr,rgba(94,106,210,0.3)); }
+.ads-notice-icon { font-size:14px; flex-shrink:0; line-height:1.4; }
+.ads-notice strong { font-weight:700; }
+
 /* Finance income statement */
 .fin-statement { display:flex; flex-direction:column; }
 .fin-line { display:flex; align-items:center; justify-content:space-between; padding:9px 4px; font-size:13px; color:var(--text-2); border-bottom:1px solid rgba(127,127,127,0.08); }

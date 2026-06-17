@@ -626,6 +626,10 @@ function GoalsView({ currentUser, liveStats, statsLoading, dateRange, goalTarget
 
 // ══ ADMIN PANEL ═══════════════════════════════════════════════════════════
 // ══ GOOGLE ADS VIEW ══════════════════════════════════════════════════════
+// Intentional Google Ads pause — context for execs. Auto-hides once the ramp-up date passes.
+const GOOGLE_ADS_RESUME = '2026-07-15';
+const adsPaused = () => new Date().toISOString().slice(0, 10) < GOOGLE_ADS_RESUME;
+
 function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
   const d = liveStats?.google;
   const rangeLabel = DATE_RANGES[dateRange]?.label || 'Month to date';
@@ -642,6 +646,13 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
         </div>
         <div className="dv-period">{rangeLabel}</div>
       </div>
+
+      {adsPaused() && (
+        <div className="ads-notice">
+          <span className="ads-notice-icon" aria-hidden="true">⏸</span>
+          <span><strong>Campaigns intentionally paused</strong> — ramping back up <strong>July 15</strong> for Aeration season. Low spend &amp; conversions through then are by design, not neglect.</span>
+        </div>
+      )}
 
       {/* Summary KPI row */}
       <div className="dv-kpi-row">
@@ -1973,7 +1984,7 @@ function AppInner() {
     const h = liveStats.hubspot, rg = liveStats.rgServices;
     let val, sub, dir;
     switch (tile.key) {
-      case 'google':   { const s = liveStats.google;   if (s) { val = s.spend; sub = s.sub; dir = s.dir; } break; }
+      case 'google':   { const s = liveStats.google;   if (s) { val = s.spend; sub = adsPaused() ? '⏸ Paused until Jul 15 · Aeration ramp' : s.sub; dir = adsPaused() ? '' : s.dir; } break; }
       case 'meta':     { const s = liveStats.meta;      if (s) { val = s.spend; sub = s.sub; dir = s.dir; } break; }
       case 'gbp':      { const s = liveStats.gbp;       if (s) { val = s.views; sub = s.sub; dir = s.dir; } break; }
       case 'pipeline': { const s = liveStats.pipeline;  if (s) { val = s.total; sub = s.sub; dir = s.dir; } break; }

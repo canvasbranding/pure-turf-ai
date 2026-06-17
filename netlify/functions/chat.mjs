@@ -213,7 +213,7 @@ Rules:
 
 Company context:
 - Pure Turf LLC, Middle Tennessee. Services: lawn care, mosquito control.
-- Google campaigns: PMax Lawn, PMax Mosquito, Search Brand, Search Lawn. Meta: awareness + retargeting.
+- Google campaigns: PMax Lawn, PMax Mosquito, Search Brand, Search Lawn. IMPORTANT: Google Ads campaigns are INTENTIONALLY PAUSED until July 15, when they ramp back up for Aeration season — so low Google spend/conversions right now are deliberate, not neglect. Always provide this context if asked about low Google Ads activity. Meta is currently disconnected.
 - HubSpot pipelines: "2026 Sales" (residential) and "2026 Commercial". liveStats.hubspot is the 2026 Sales pipeline (the default view); liveStats.hubspotCommercial is the 2026 Commercial pipeline. Use the matching one for the pipeline the user asks about.
 - Reps on the leaderboard: Kaley Brownlee, Chris Kleeman, Daniel Anderson (residential sales); Wyatt Raines (commercial sales, not residential). Kurt Dryden (VP Finance) is not shown as a sales rep. Owner: David Patton.`;
 }
