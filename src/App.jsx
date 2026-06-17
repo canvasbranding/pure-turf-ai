@@ -1501,6 +1501,112 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
 }
 
 
+// ── SCORECARD ──────────────────────────────────────────────────────────
+// Effort (calls/emails from HubSpot) next to outcome (leads/won/close%/revenue from
+// the pipeline data). Activity loads from its own function only when this view opens.
+function ScorecardView({ liveStats, dateRange, sendMessage }) {
+  const [activity, setActivity] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/.netlify/functions/scorecard?range=${dateRange}`)
+      .then(r => r.json()).then(d => { if (!cancelled) setActivity(d); })
+      .catch(() => {}).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [dateRange]);
+
+  const rangeLabel = DATE_RANGES[dateRange]?.label || 'Month to date';
+  const fmt$ = v => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v||0}`;
+  const board = (liveStats?.hubspot?.repLeaderboard || []).filter(r => r.name !== 'Unassigned');
+  const actByName = {};
+  (activity?.reps || []).forEach(r => { actByName[r.name] = r; });
+  const emailsOff = (activity?.unavailable || []).includes('emails');
+  const callsOff  = (activity?.unavailable || []).includes('calls');
+
+  const rows = board.map(r => {
+    const a = actByName[r.name] || {};
+    const calls = a.calls ?? 0, emails = a.emails ?? 0;
+    const won = r.won || 0;
+    return {
+      name: r.name, note: r.note,
+      calls, emails, activity: calls + emails,
+      leads: r.leads || 0, won, closeRate: r.closeRate,
+      revenue: r.revenue || 0,
+      // Effort efficiency: wins per 100 outreach touches.
+      perWin: won > 0 ? Math.round((calls + emails) / won) : null,
+    };
+  }).sort((a, b) => b.activity - a.activity);
+  const maxAct = Math.max(...rows.map(r => r.activity), 1);
+
+  return (
+    <div className="data-view-scroll">
+      <div className="dv-header">
+        <div>
+          <div className="dv-eyebrow">Rep Scorecard · 2026 Sales</div>
+          <h2 className="dv-title">Scorecard</h2>
+        </div>
+        <div className="dv-period">{rangeLabel}</div>
+      </div>
+
+      {(emailsOff || callsOff) && (
+        <div className="data-health data-health-ok" role="status" style={{marginBottom:12, paddingTop:0}}>
+          {callsOff && emailsOff ? 'Call & email activity unavailable — grant the HubSpot private app the calls/emails read scopes.'
+            : emailsOff ? 'Email activity unavailable — grant the HubSpot private app the “crm.objects.emails.read” scope to add emails.'
+            : 'Call activity unavailable — grant the HubSpot private app the “crm.objects.calls.read” scope.'}
+        </div>
+      )}
+
+      <div className="dv-table">
+        <div className="dv-table-hdr">
+          <div className="dv-col-main">Rep</div>
+          <div className="dv-col-num">Calls</div>
+          <div className="dv-col-num">Emails</div>
+          <div className="dv-col-num">Leads</div>
+          <div className="dv-col-num">Won</div>
+          <div className="dv-col-num">Close%</div>
+          <div className="dv-col-num">Revenue</div>
+        </div>
+        {rows.map(r => (
+          <div key={r.name} className="dv-table-row" onClick={() => sendMessage(`Give me a performance review of ${r.name.split(' ')[0]} for ${rangeLabel} — calls, emails, leads, close rate, and revenue. What should they focus on?`)}>
+            <div className="dv-col-main dv-rep-name">
+              {r.name}{r.note && <span className="rep-tag">{r.note}</span>}
+              <div className="sc-activity-bar"><div className="sc-activity-fill" style={{width:`${Math.round(r.activity/maxAct*100)}%`}}/></div>
+            </div>
+            <div className="dv-col-num">{loading ? '…' : r.calls}</div>
+            <div className="dv-col-num">{loading ? '…' : (emailsOff ? '–' : r.emails)}</div>
+            <div className="dv-col-num">{r.leads}</div>
+            <div className="dv-col-num dv-won-num">{r.won}</div>
+            <div className="dv-col-num">{r.closeRate != null ? `${r.closeRate}%` : '–'}</div>
+            <div className="dv-col-num">{r.revenue ? fmt$(r.revenue) : '–'}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="dv-section-label" style={{margin:'16px 0 8px'}}>Touches per Win</div>
+      <div className="sc-note">How many calls + emails it takes each rep to close one deal — lower is more efficient.</div>
+      <div className="dv-funnel">
+        {rows.filter(r => r.perWin != null).sort((a,b) => a.perWin - b.perWin).map(r => {
+          const maxPW = Math.max(...rows.filter(x => x.perWin != null).map(x => x.perWin), 1);
+          return (
+            <div key={r.name} className="dv-funnel-row">
+              <div className="dv-funnel-label">{r.name}</div>
+              <div className="dv-funnel-bar-wrap"><div className="dv-funnel-bar" style={{width:`${Math.round(r.perWin/maxPW*100)}%`}}/></div>
+              <div className="dv-funnel-count">{r.perWin}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button className="dv-ai-btn" onClick={() => sendMessage(`Give me a full team scorecard analysis for ${rangeLabel} — who's putting in the activity, who's converting it, and who needs coaching.`)}>
+        <span>Ask AI for coaching insights</span>
+        <Icon name="arrowR" size={13}/>
+      </button>
+      <div style={{height:32}}/>
+    </div>
+  );
+}
+
 // ── MOBILE DETECTION ───────────────────────────────────────────────────
 function useMobile(bp = 768) {
   const [m, setM] = useState(() => window.innerWidth <= bp);
@@ -2195,6 +2301,7 @@ function AppInner() {
                 ...(perms.googleAds ? [{ key:'gads',  icon:'chart',    label:'Google Ads' }] : []),
                 ...(perms.gbp      ? [{ key:'gbp',   icon:'gbp',      label:'GBP'        }] : []),
                 ...(perms.pipeline ? [{ key:'pipe',  icon:'pipeline', label:'Pipeline'   }] : []),
+                ...(perms.teamGoals ? [{ key:'score', icon:'briefing', label:'Scorecard' }] : []),
               ].map(item => (
                 <button key={item.key}
                   className={`snav-btn${
@@ -2202,7 +2309,8 @@ function AppInner() {
                     (mainView==='goals'     && item.key==='goals') ||
                     (mainView==='google-ads'&& item.key==='gads') ||
                     (mainView==='gbp'       && item.key==='gbp') ||
-                    (mainView==='pipeline'  && item.key==='pipe') ? ' active' : ''}`}
+                    (mainView==='pipeline'  && item.key==='pipe') ||
+                    (mainView==='scorecard' && item.key==='score') ? ' active' : ''}`}
                   title={item.label}
                   onClick={() => {
                     if (item.key === 'home')  { setMobileTab('dashboard'); setMainView('dashboard'); }
@@ -2210,6 +2318,7 @@ function AppInner() {
                     else if (item.key === 'gads')  { setMobileTab('google-ads'); setMainView('google-ads'); }
                     else if (item.key === 'gbp')   { setMobileTab('dashboard'); setMainView('gbp'); }
                     else if (item.key === 'pipe')  { setMobileTab('pipeline'); setMainView('pipeline'); }
+                    else if (item.key === 'score') { setMobileTab('dashboard'); setMainView('scorecard'); }
                   }}>
                   <Icon name={item.icon} size={16}/>
                   {sidebarOpen && <span>{item.label}</span>}
@@ -2348,6 +2457,11 @@ function AppInner() {
                 {/* PIPELINE VIEW */}
                 <div className="goals-col" style={{display: mainView === 'pipeline' ? undefined : 'none'}}>
                   <PipelineView key={dateRange} liveStats={liveStats} statsLoading={statsLoading} dateRange={dateRange} sendMessage={sendMessage}/>
+                </div>
+
+                {/* SCORECARD VIEW */}
+                <div className="goals-col" style={{display: mainView === 'scorecard' ? undefined : 'none'}}>
+                  {mainView === 'scorecard' && <ScorecardView key={dateRange} liveStats={liveStats} dateRange={dateRange} sendMessage={sendMessage}/>}
                 </div>
 
               </div>{/* /left-col */}

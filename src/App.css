@@ -319,6 +319,11 @@ html[data-theme="dark"] .snav-btn.active {
 .metric-group { margin-bottom:18px; }
 .metric-group-label { font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:700; margin:0 2px 8px; }
 
+/* Scorecard */
+.sc-activity-bar { height:3px; border-radius:2px; background:rgba(127,127,127,0.14); margin-top:5px; overflow:hidden; }
+.sc-activity-fill { height:100%; background:var(--accent,#5E6AD2); border-radius:2px; }
+.sc-note { font-size:11px; color:var(--text-3); margin:0 2px 10px; line-height:1.4; }
+
 .metric-card {
   border-radius:var(--r-lg); cursor:pointer; will-change:transform;
   background:var(--card); border:1px solid var(--border);
