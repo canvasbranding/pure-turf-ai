@@ -48,7 +48,9 @@ export async function fetchQuickBooksPL(apiKey, datePreset = 'this_year') {
 export async function fetchQuickBooks(apiKey, datePreset = 'this_year') {
   const [pl, bal] = await Promise.all([
     fetchQuickBooksPL(apiKey, datePreset),
-    fetchQuickBooksBalances(apiKey, datePreset).catch(() => ({ accountsReceivable: null, cash: null })),
+    // A/R + cash are CURRENT point-in-time balances (period-independent). The accounts
+    // report is finicky with some presets, so always use a known-good one.
+    fetchQuickBooksBalances(apiKey, 'last_year').catch(() => ({ accountsReceivable: null, cash: null })),
   ]);
   return { ...pl, ...bal };
 }
