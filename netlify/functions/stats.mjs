@@ -183,6 +183,16 @@ export const handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
+  // Temporary probe: list RG Services date/sold properties to find the real signup field.
+  if (event.queryStringParameters?.rgprops === '1') {
+    const r = await fetch('https://api.hubapi.com/crm/v3/properties/2-54724126', { headers: { 'Authorization': `Bearer ${HUBSPOT_TOKEN}` } });
+    const data = await r.json();
+    const matches = (data.results || [])
+      .filter(p => /sold|sale|date|start|signup|sign_up/i.test(p.name) || /sold|sale|date|start|signup/i.test(p.label || ''))
+      .map(p => ({ name: p.name, label: p.label, type: p.type }));
+    return { statusCode: 200, headers, body: JSON.stringify(matches) };
+  }
+
   const rangeKey = event.queryStringParameters?.range || 'mtd';
   const isWarm = event.queryStringParameters?.warm === '1'; // keep-warm forces a real recompute
   const { date_from, date_to } = getDateRange(rangeKey);
