@@ -198,9 +198,10 @@ export const handler = async (event) => {
     return { statusCode: 200, headers: { ...headers, ...cdnHeaders }, body: cached.body };
   }
 
-  const [googleResult, metaResult, gbpResult, hubspotResult, rgResult] = await Promise.allSettled([
+  // Meta (facebook_ads) disabled — that Windsor connector slot was reallocated to
+  // QuickBooks. Re-add fetchWindsor('facebook_ads', …) here to restore Meta.
+  const [googleResult, gbpResult, hubspotResult, rgResult] = await Promise.allSettled([
     fetchWindsor('google_ads', date_from, date_to),
-    fetchWindsor('facebook_ads', date_from, date_to),
     fetchWindsor('google_my_business', date_from, date_to),
     fetchHubSpotDeals(date_from),
     fetchRGServices(HUBSPOT_TOKEN, date_from),
@@ -252,48 +253,7 @@ export const handler = async (event) => {
     stats.google = { spend: Math.round(spend), conversions: Math.round(convs), clicks: Math.round(clicks), impressions: Math.round(impressions), cpa, cpc, ctr, campaigns, sub: convs > 0 ? `↑ ${Math.round(convs)} conv · $${cpa} CPA` : `$${Math.round(spend).toLocaleString()} spend`, dir: 'up' };
   } else { stats.errors.google = googleResult.reason?.message; }
 
-  // ── Meta Ads ────────────────────────────────────────────
-  if (metaResult.status === 'fulfilled') {
-    const allRows = metaResult.value?.data || [];
-    // Debug: log what datasources Windsor is actually returning
-    const datasources = [...new Set(allRows.map(r => r.datasource))];
-    const campaignNames = [...new Set(allRows.map(r => r.campaign))];
-    console.log(`[META] Windsor returned ${allRows.length} rows. Datasources: ${JSON.stringify(datasources)}. Campaigns: ${JSON.stringify(campaignNames.slice(0, 15))}`);
-    // Filter: keep only rows that look like Meta/Facebook data (not Google leaking in)
-    const rows = allRows.filter(r => {
-      const ds = (r.datasource || '').toLowerCase();
-      // If no datasource field, keep it (it came from the facebook_ads endpoint)
-      if (!ds) return true;
-      // Keep anything that says facebook or meta
-      if (ds.includes('facebook') || ds.includes('meta')) return true;
-      // Reject anything that says google
-      if (ds.includes('google')) return false;
-      // Keep anything else (unknown datasource)
-      return true;
-    });
-    const spend = rows.reduce((s, r) => s + (parseFloat(r.spend) || parseFloat(r.cost) || 0), 0);
-    const convs = rows.reduce((s, r) => s + (parseFloat(r.conversions) || 0), 0);
-    const clicks = rows.reduce((s, r) => s + (parseFloat(r.clicks) || 0), 0);
-    const impressions = rows.reduce((s, r) => s + (parseFloat(r.impressions) || 0), 0);
-    const cpa   = convs > 0 ? Math.round(spend / convs) : null;
-    const cpm   = impressions > 0 ? (spend / impressions * 1000).toFixed(2) : null;
-    const campMap = {};
-    rows.forEach(r => {
-      const name = r.campaign || 'Unknown';
-      if (!campMap[name]) campMap[name] = { spend: 0, conversions: 0, clicks: 0, impressions: 0 };
-      campMap[name].spend       += parseFloat(r.spend) || parseFloat(r.cost) || 0;
-      campMap[name].conversions += parseFloat(r.conversions) || 0;
-      campMap[name].clicks      += parseFloat(r.clicks) || 0;
-      campMap[name].impressions += parseFloat(r.impressions) || 0;
-    });
-    const campaigns = Object.entries(campMap).map(([name, d]) => ({
-      name, spend: Math.round(d.spend), conversions: Math.round(d.conversions), clicks: Math.round(d.clicks),
-      cpa: d.conversions > 0 ? Math.round(d.spend / d.conversions) : null,
-      cpm: d.impressions > 0 ? (d.spend / d.impressions * 1000).toFixed(2) : null,
-      sharePct: spend > 0 ? Math.round(d.spend / spend * 100) : 0,
-    })).sort((a, b) => b.spend - a.spend);
-    stats.meta = { spend: Math.round(spend), conversions: Math.round(convs), clicks: Math.round(clicks), impressions: Math.round(impressions), cpa, cpm, campaigns, sub: cpa ? `$${cpa} CPA` : `$${Math.round(spend).toLocaleString()} spend`, dir: 'dn' };
-  } else { stats.errors.meta = metaResult.reason?.message; }
+  // ── Meta Ads — DISABLED (Windsor slot reallocated to QuickBooks) ──────────
 
   // ── GBP ─────────────────────────────────────────────────
   if (gbpResult.status === 'fulfilled') {
@@ -330,8 +290,7 @@ export const handler = async (event) => {
   } else { stats.errors.hubspot = hubspotResult.reason?.message; }
 
   const googleSpend = stats.google?.spend || 0;
-  const metaSpend   = stats.meta?.spend   || 0;
-  stats.adSpend = { total: googleSpend + metaSpend, google: googleSpend, meta: metaSpend };
+  stats.adSpend = { total: googleSpend, google: googleSpend, meta: 0 };
 
   // ── RG Services KPIs ────────────────────────────────────────
   if (rgResult.status === 'fulfilled') {

@@ -239,7 +239,9 @@ function getPerms(email, role, overrides) {
 
 const ALL_TILES = [
   { key:'google',    lbl:'Google Ads',   val:4821, prefix:'$', sub:'↑ 108 conv · $89 CPA',  dir:'up', perm:'googleAds', group:'Marketing' },
-  { key:'meta',      lbl:'Meta Ads',     val:1205, prefix:'$', sub:'↓ $484 CPA',             dir:'dn', perm:'metaAds',   group:'Marketing' },
+  // Meta Ads — disabled while the Windsor slot is reallocated to QuickBooks. Restore by
+  // re-adding this tile + the facebook_ads fetch in stats.mjs once Meta is reconnected.
+  // { key:'meta', lbl:'Meta Ads', val:1205, prefix:'$', sub:'↓ $484 CPA', dir:'dn', perm:'metaAds', group:'Marketing' },
   { key:'gbp',       lbl:'GBP Views',    val:2841, prefix:'',  sub:'↑ 47 calls this week',  dir:'up', perm:'gbp',       group:'Marketing' },
   { key:'pipeline',  lbl:'Pipeline',     val:1617, prefix:'',  sub:'deals · 2026',           dir:'',   perm:'pipeline',  group:'Sales' },
   // Business-outcome tiles — the funnel from leads → closes → customers → revenue.
@@ -249,10 +251,10 @@ const ALL_TILES = [
   { key:'newCustomers',lbl:'New Customers', val:0, prefix:'',  sub:'added this period', dir:'up', perm:'pipeline', group:'Customers' },
   { key:'activeCustomers',lbl:'Active Customers', val:0, prefix:'', sub:'total book',   dir:'',   perm:'pipeline', group:'Customers' },
   { key:'cancellations',lbl:'Cancellations',val:0, prefix:'', sub:'this period',        dir:'dn', perm:'pipeline', group:'Customers' },
-  { key:'adSpend',    lbl:'Total Ad Spend', val:0, prefix:'$', sub:'Google + Meta',     dir:'',   perm:'googleAds', group:'Marketing' },
+  { key:'adSpend',    lbl:'Total Ad Spend', val:0, prefix:'$', sub:'paid search',       dir:'',   perm:'googleAds', group:'Marketing' },
 ];
 const ALL_ACTIONS = [
-  { icon:'briefing', label:'Monday Briefing', sub:'Weekly performance overview',   perm:'mondayBrief', prompt:'Give me my Monday morning marketing briefing — Google Ads, Meta, and GBP performance overview.' },
+  { icon:'briefing', label:'Monday Briefing', sub:'Weekly performance overview',   perm:'mondayBrief', prompt:'Give me my Monday morning marketing briefing — Google Ads and GBP performance overview.' },
   { icon:'chart',    label:'Google Ads',      sub:'Campaign spend & CPA breakdown', perm:'googleAds',   prompt:'Break down Google Ads campaign performance this month — spend, conversions, and CPA by campaign.' },
   { icon:'gbp',      label:'GBP Insights',    sub:'Local search performance',       perm:'gbp',         prompt:'What does Google Business Profile look like this week — views, calls, directions, clicks?' },
   { icon:'pipeline', label:'Pipeline',        sub:'Deals by stage and rep',         perm:'pipeline',    prompt:'Give me a full pipeline breakdown — deals by stage, by rep, and what needs attention.' },
@@ -1834,7 +1836,7 @@ function AppInner() {
       case 'meta':     { const s = liveStats.meta;      if (s) { val = s.spend; sub = s.sub; dir = s.dir; } break; }
       case 'gbp':      { const s = liveStats.gbp;       if (s) { val = s.views; sub = s.sub; dir = s.dir; } break; }
       case 'pipeline': { const s = liveStats.pipeline;  if (s) { val = s.total; sub = s.sub; dir = s.dir; } break; }
-      case 'adSpend':  { const s = liveStats.adSpend;   if (s) { val = s.total; sub = `Google $${(s.google||0).toLocaleString()} · Meta $${(s.meta||0).toLocaleString()}`; } break; }
+      case 'adSpend':  { const s = liveStats.adSpend;   if (s) { val = s.total; sub = 'Google Ads · this period'; } break; }
       case 'leads':       if (h) { val = h.newLeads; sub = 'new this period'; } break;
       case 'closeRate':   if (h && h.closeRate != null) { val = h.closeRate; sub = `${h.wonCount||0} won · ${h.lostCount||0} lost`; } break;
       case 'revenue':     if (h) { val = h.revenue; sub = 'closed won'; } break;
@@ -2607,7 +2609,7 @@ function AppInner() {
                     <div className="chat-empty">
                       <div className="ce-mark"><PTMark size={40} color="var(--accent)"/></div>
                       <div className="ce-title">Good {greet}, {currentUser?.name?.split(' ')[0]}.</div>
-                      <div className="ce-sub">Ask me anything about Pure Turf's performance. I have live access to Google Ads, Meta, GBP, and your HubSpot pipeline.</div>
+                      <div className="ce-sub">Ask me anything about Pure Turf's performance. I have live access to Google Ads, GBP, and your HubSpot pipeline.</div>
                     </div>
                   )}
                   {messages.map(renderMsg)}

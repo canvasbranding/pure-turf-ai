@@ -34,13 +34,6 @@ const tools = [
     }, required: [] },
   },
   {
-    name: 'get_meta_ads',
-    description: 'Fetch Meta Ads performance from Windsor.ai.',
-    input_schema: { type: 'object', properties: {
-      date_from: { type: 'string' }, date_to: { type: 'string' },
-    }, required: [] },
-  },
-  {
     name: 'get_gbp',
     description: 'Fetch Google Business Profile insights (views, calls, directions, clicks) from Windsor.ai.',
     input_schema: { type: 'object', properties: {
@@ -160,7 +153,6 @@ async function executeTool(name, input, dateRange) {
   try {
     switch (name) {
       case 'get_google_ads':    return await getWindsor('google_ads', input.date_from, input.date_to, dateRange);
-      case 'get_meta_ads':      return await getWindsor('facebook_ads', input.date_from, input.date_to, dateRange);
       case 'get_gbp':           return await getWindsor('google_my_business', input.date_from, input.date_to, dateRange);
       case 'get_pipeline_deals':return await getPipelineDeals(input.pipeline_name, input.limit, input.owner_name);
       case 'get_all_pipelines': return await getAllPipelines();
@@ -201,7 +193,6 @@ ${framing}
 
 You have live access to:
 - Google Ads (Windsor.ai) — spend, conversions, CPA by campaign
-- Meta Ads (Windsor.ai) — spend, CPM, reach
 - Google Business Profile (Windsor.ai) — views, calls, directions, clicks
 - HubSpot CRM — deals, pipeline stages, rep performance, and lead-source attribution (True Lead Source)
 ${groundTruth}
