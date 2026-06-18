@@ -762,7 +762,7 @@ function GoalsView({ currentUser, liveStats, statsLoading, dateRange, goalTarget
 
       {/* ── GOALS SECTION: Exec — area-based tracking vs shared targets ── */}
       {(goalsTab === 'goals') && !isSales && (
-        <GoalTrackingView orgGoals={orgGoals} perms={perms} sendMessage={sendMessage}/>
+        <GoalTrackingView orgGoals={orgGoals} perms={perms} sendMessage={sendMessage} currentUser={currentUser}/>
       )}
       <div style={{ height: 32 }}/>
     </div>
@@ -833,6 +833,69 @@ function GoalTrackingView({ orgGoals, perms, sendMessage }) {
         );
       })}
       {!ytd && <div className="goal-track-loading">Loading year-to-date actuals…</div>}
+      <GoalAlignment orgGoals={orgGoals} currentUser={currentUser}/>
+    </div>
+  );
+}
+
+// Maps a rep scorecard metric → the company/area annual target it ladders up to.
+const REP_TO_AREA = {
+  revenue:  { label:'Revenue',       format:'currency', target: g => g?.company?.revenue ?? null },
+  won:      { label:'Deals Won',     format:'number',   target: g => g?.sales?.dealsWon ?? null },
+  leads:    { label:'New Leads',     format:'number',   target: g => g?.sales?.newLeads != null ? g.sales.newLeads * 12 : null },
+  programs: { label:'Programs Sold', format:'number',   target: g => g?.company?.newCustomers ?? null },
+};
+const PERIOD_MULT = { weekly:52, monthly:12, quarterly:4, seasonal:4, annual:1, yearly:1 };
+function annualizeGoal(g) {
+  const t = Number(g.target_value) || 0;
+  if (g.period_type === 'custom' && g.start_date && g.end_date) {
+    const days = Math.max(1, (new Date(g.end_date) - new Date(g.start_date)) / 864e5);
+    return t * (365 / days);
+  }
+  return t * (PERIOD_MULT[g.period_type] ?? 1);
+}
+
+// Advisory rollup: do the reps' individual goals ladder up to the company target?
+function GoalAlignment({ orgGoals, currentUser }) {
+  const [repGoals, setRepGoals] = React.useState(null);
+  React.useEffect(() => {
+    if (!currentUser?.email) return;
+    fetch('/.netlify/functions/scorecard-goals', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'list', requester_email: currentUser.email }) })
+      .then(r => r.json()).then(d => { if (d.ok) setRepGoals(d.goals || []); }).catch(() => {});
+  }, [currentUser]);
+  const fmt = (format, v) => v == null ? '–' : format === 'currency' ? fmtCurrencyShort(v) : Math.round(v).toLocaleString();
+  const active = (repGoals || []).filter(g => g.status === 'active' || !g.status);
+  const rows = Object.entries(REP_TO_AREA).map(([key, m]) => {
+    const target = m.target(orgGoals);
+    const forMetric = active.filter(g => g.metric_key === key);
+    const sum = forMetric.reduce((t, g) => t + annualizeGoal(g), 0);
+    const reps = new Set(forMetric.map(g => g.rep_email)).size;
+    const coverage = target ? Math.round(sum / target * 100) : null;
+    return { key, m, target, sum, reps, coverage, has: forMetric.length > 0 };
+  });
+  return (
+    <div className="goal-area goal-align">
+      <div className="goal-area-hdr">
+        <div className="goal-area-title">Goal Alignment · Reps → Company</div>
+        <div className="goal-area-meta">do individual rep goals ladder up?</div>
+      </div>
+      <div className="goal-area-grid">
+        {rows.map(({ key, m, target, sum, reps, coverage, has }) => {
+          const status = coverage == null ? 'none' : coverage >= 100 ? 'good' : coverage >= 70 ? 'warn' : 'bad';
+          return (
+            <div key={key} className="goal-card">
+              <div className="goal-card-lbl">{m.label}</div>
+              <div className="goal-card-val">{has ? fmt(m.format, sum) : '—'}<span className="goal-card-target"> / {fmt(m.format, target)}</span></div>
+              <div className="goal-bar-wrap"><div className={`goal-bar gb-${status}`} style={{ width: `${Math.min(100, coverage || 0)}%` }}/></div>
+              <div className="goal-card-foot">
+                <span className="goal-card-pct">{coverage != null ? `${coverage}% of target` : 'no target set'}</span>
+                <span className={`goal-card-status gs-${status}`}>{!has ? 'no rep goals' : `${reps} rep${reps === 1 ? '' : 's'} committed`}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="admin-note" style={{marginTop:10}}>Advisory — execs can set stretch goals for reps and reps set their own; this shows how those individual goals sum toward the company target (annualized by each goal's period). Rate metrics like close rate aren't summed. Set rep goals from the Scorecard.</div>
     </div>
   );
 }
