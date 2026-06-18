@@ -112,5 +112,26 @@ export default async (req) => {
   } else out.errors.gbp = `gbp ${gbp.status}`;
 
 
+  // ── TEMP probe: find the per-keyword rankings REST endpoint ──────────────
+  if (req.url && req.url.includes('probe=1')) {
+    const cands = [
+      `${HOST.keyword}/api/v1/rank-tracker/?project_id=78504&page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/keywords/?project_id=78504&page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/78504/keywords/?page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/rankings/?project_id=78504&page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/keyword-rankings/?project_id=78504&page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/78504/rankings/?page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/projects/78504/keywords/?page_size=10`,
+    ];
+    const probe = [];
+    for (const u of cands) {
+      const r = await sa(u);
+      const b = r.body;
+      const items = b?.items || b?.results || b?.data;
+      probe.push({ url: u.replace(HOST.keyword, ''), status: r.status, hasItems: Array.isArray(items), itemSample: Array.isArray(items) ? items[0] : (typeof b === 'string' ? b.slice(0, 120) : Object.keys(b || {}).slice(0, 8)) });
+    }
+    out._probe = probe;
+  }
+
   return new Response(JSON.stringify(out), { status: 200, headers: { ...CORS, 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=3600, stale-while-revalidate=86400' } });
 };
