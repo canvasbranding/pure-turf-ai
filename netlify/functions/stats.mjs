@@ -171,16 +171,17 @@ function computeDealMetrics(deals, date_from, getStageName) {
   const taggedLeads = manualTagged;             // leads a rep hand-tagged
   const attributedLeads = attributed;           // leads with ANY source (manual or auto)
 
-  // Deals created per month — a growth curve for the pipeline view (period-independent
-  // so it always reads as momentum over time, not just the selected window).
-  const createdByMonth = {};
-  deals.forEach(d => {
-    const cd = d.properties.createdate;
-    if (!cd) return;
+  // Deals WON per month (by close date) — a sales-momentum curve for the pipeline
+  // view. Uses closes (not createdate, which is dominated by the bulk pipeline import)
+  // so it reads as real velocity. Period-independent; ignores stray pre-2026 closes.
+  const wonByMonth = {};
+  wonDeals.forEach(d => {
+    const cd = d.properties.closedate;
+    if (!cd || cd.slice(0, 7) < '2026-01') return;
     const m = cd.slice(0, 7); // YYYY-MM
-    createdByMonth[m] = (createdByMonth[m] || 0) + 1;
+    wonByMonth[m] = (wonByMonth[m] || 0) + 1;
   });
-  const createdTrend = Object.entries(createdByMonth)
+  const createdTrend = Object.entries(wonByMonth)
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-8)
     .map(([month, count]) => ({ month, count }));

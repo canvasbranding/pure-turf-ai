@@ -960,8 +960,8 @@ function PipelineView({ liveStats, statsLoading, dateRange, sendMessage }) {
         const fmtMonth = m => { const [y, mo] = m.split('-'); return new Date(+y, +mo - 1, 1).toLocaleDateString('en-US', { month: 'short' }); };
         return (
           <>
-            <div className="dv-section-label" style={{marginTop:18}}>Deals Created · Monthly</div>
-            <TrendChart data={ct.map(p => p.count)} color="#4F82A0" valueFmt={v => Math.round(v)}
+            <div className="dv-section-label" style={{marginTop:18}}>Deals Won · Monthly</div>
+            <TrendChart data={ct.map(p => p.count)} color="#10B981" valueFmt={v => Math.round(v)}
               labels={[fmtMonth(ct[0].month), '', fmtMonth(ct[ct.length - 1].month)]} />
           </>
         );
