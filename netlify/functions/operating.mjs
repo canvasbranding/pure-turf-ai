@@ -78,34 +78,67 @@ export default async (req) => {
     const ctx = { now, commercialPipeline: PIPELINE_2026_COMMERCIAL, priorWonAddresses, openAddressCounts, sourceRank };
 
     // ── Provider: SALES (Revenue Rescue) ──────────────────────────────────────
-    let salesRecords = 0;
+    // Reps get their own individual follow-ups; leadership gets the few biggest deals to
+    // know about PLUS per-rep coaching rollups (1,000 individual cards isn't a leadership
+    // priority — the rollup is). Both draw from the same rescue scoring.
+    const byRep = {};
+    const salesScored = [];
     for (const d of rows) {
       const p = d.properties;
       if (!OPEN_STAGES.includes(p.dealstage)) continue;
       if (!p.hubspot_owner_id || !OWNER_NAMES[p.hubspot_owner_id]) continue;
       const scored = scoreDeal(d, ctx, weights);
       if (scored.flags.length === 0 && scored.score < 6) continue;
-      if (myName && scored.ownerName !== myName) continue; // reps see only their own
-      salesRecords++;
       const r = toRescueItem(scored);
-      items.push(makeItem({
-        id: `rescue:${r.dealId}`,
-        type: r.flags.includes('existingUpsell') ? 'opportunity' : (r.urgency === 'high' ? 'priority' : 'action'),
-        category: 'sales',
-        title: `Follow up: ${r.customer || r.name}`,
-        summary: r.reason,
-        priorityScore: r.priorityScore,
-        ownerName: r.ownerName,
-        roleScope: 'rep',
-        estimatedImpact: r.value,
-        recommendedAction: r.recommendedAction,
-        whyItMatters: r.reason,
-        riskIfIgnored: r.flags.includes('staleEstimate') ? 'Estimate is going cold — likely lost if it sits another week.' : null,
-        confidence: confidence({ note: 'live HubSpot deal', sample: 1 }),
-        sourceTrail: { system: 'HubSpot', dateRange: 'open pipeline (all)', lastSync: new Date(now).toISOString(), basis: 'Deal-level: stage, time-in-stage, logged activity, value', dataState: 'live' },
-        links: { hubspotUrl: r.hubspotUrl },
-        related: { dealId: r.dealId, repEmail: null, source: r.source },
-      }));
+      const R = byRep[scored.ownerName] || (byRep[scored.ownerName] = { name: scored.ownerName, count: 0, stale: 0, neverContacted: 0, atRisk: 0 });
+      R.count++;
+      if (scored.flags.includes('staleEstimate')) R.stale++;
+      if (!scored.everTouched) R.neverContacted++;
+      if (r.revenueImpact !== 'Low') R.atRisk += r.value;
+      salesScored.push({ scored, r });
+    }
+    salesScored.sort((a, b) => b.scored.score - a.scored.score);
+
+    const indItem = ({ scored, r }, roleScope) => makeItem({
+      id: `rescue:${r.dealId}`,
+      type: r.flags.includes('existingUpsell') ? 'opportunity' : (r.urgency === 'high' ? 'priority' : 'action'),
+      category: 'sales',
+      title: `Follow up: ${r.customer || r.name}`,
+      summary: r.reason,
+      priorityScore: r.priorityScore,
+      ownerName: r.ownerName,
+      roleScope,
+      estimatedImpact: r.value,
+      recommendedAction: r.recommendedAction,
+      whyItMatters: r.reason,
+      riskIfIgnored: r.flags.includes('staleEstimate') ? 'Estimate is going cold — likely lost if it sits another week.' : null,
+      confidence: confidence({ note: 'live HubSpot deal', sample: 1 }),
+      sourceTrail: { system: 'HubSpot', dateRange: 'open pipeline (all)', lastSync: new Date(now).toISOString(), basis: 'Deal-level: stage, time-in-stage, logged activity, value', dataState: 'live' },
+      links: { hubspotUrl: r.hubspotUrl },
+      related: { dealId: r.dealId, source: r.source },
+    });
+
+    if (myName) {
+      for (const x of salesScored.filter(x => x.scored.ownerName === myName).slice(0, 25)) items.push(indItem(x, 'rep'));
+    } else {
+      for (const x of salesScored.slice(0, 10)) items.push(indItem(x, 'manager')); // biggest deals to know about
+      for (const R of Object.values(byRep)) {
+        if (R.stale + R.neverContacted === 0) continue;
+        items.push(makeItem({
+          id: `coach:${R.name.replace(/\s+/g, '')}`,
+          type: 'coaching_note', category: 'sales', roleScope: 'manager',
+          title: `${R.name}: follow-up health`,
+          summary: `${R.count} open · ${R.stale} stale estimate${R.stale === 1 ? '' : 's'} · ${R.neverContacted} never contacted · $${Math.round(R.atRisk).toLocaleString()} at risk`,
+          priorityScore: Math.min(90, 25 + Math.round(R.atRisk / 20000) + R.stale),
+          ownerName: R.name,
+          estimatedImpact: R.atRisk,
+          recommendedAction: `Review ${R.name.split(' ')[0]}'s rescue queue; prioritize the stale estimates first.`,
+          whyItMatters: 'Stale estimates and never-contacted leads are the fastest revenue leak on the team.',
+          confidence: confidence({ note: 'live HubSpot', sample: R.count }),
+          sourceTrail: { system: 'HubSpot', dateRange: 'open pipeline', lastSync: new Date(now).toISOString(), basis: 'Per-rep open deals: stale estimates, never-contacted, value at risk', dataState: 'live' },
+          related: { repName: R.name },
+        }));
+      }
     }
 
     // ── Provider: GOALS (pacing risk) — manager/leadership only ───────────────
