@@ -289,9 +289,17 @@ function scorecardPacing(metricKey, goal, actual) {
 }
 
 // Format a value per a metric's unit (shared by goal cards).
+function fmtCurrencyShort(v) {
+  const n = v < 0, a = Math.abs(v);
+  let s;
+  if (a >= 1000000) { const m = a / 1000000; s = `$${m % 1 === 0 ? m : m.toFixed(1)}M`; }   // $10M, $1.7M
+  else if (a >= 1000) s = `$${Math.round(a / 1000).toLocaleString()}k`;                       // $493k
+  else s = `$${Math.round(a)}`;
+  return (n ? '-' : '') + s;
+}
 function fmtMetric(format, v) {
   if (v == null) return '–';
-  if (format === 'currency') { const n = v < 0, a = Math.abs(v); return (n ? '-' : '') + (a >= 1000 ? `$${Math.round(a / 1000).toLocaleString()}k` : `$${Math.round(a)}`); }
+  if (format === 'currency') return fmtCurrencyShort(v);
   if (format === 'percent') return `${Math.round(v)}%`;
   return Math.round(v).toLocaleString();
 }
@@ -763,10 +771,7 @@ function GoalTrackingView({ orgGoals, perms, sendMessage }) {
   const visible = GOAL_AREAS.filter(a => a.key !== 'finance' || perms?.finance || perms?.financeGoals);
   const fmtVal = (format, v) => {
     if (v == null) return '–';
-    if (format === 'currency') {
-      const neg = v < 0, a = Math.abs(v);
-      return (neg ? '-' : '') + (a >= 1000 ? `$${Math.round(a/1000).toLocaleString()}k` : `$${Math.round(a)}`);
-    }
+    if (format === 'currency') return fmtCurrencyShort(v);
     if (format === 'percent') return `${Math.round(v)}%`;
     return Math.round(v).toLocaleString();
   };
