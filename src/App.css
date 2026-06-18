@@ -421,6 +421,17 @@ html[data-theme="dark"] .sc-modal { background:#1C1C1E; }
 .sc-btn-ghost { font-family:var(--font); font-size:13px; font-weight:600; color:var(--text-2); background:none; border:1px solid var(--border-md); border-radius:10px; padding:9px 16px; cursor:pointer; }
 .sc-btn-primary { font-family:var(--font); font-size:13px; font-weight:600; color:#fff; background:var(--accent); border:none; border-radius:10px; padding:9px 18px; cursor:pointer; }
 .sc-btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+/* Needs follow-up */
+.sc-fu-count { display:inline-block; min-width:18px; text-align:center; font-size:10px; font-weight:700; color:#fff; background:var(--red); border-radius:9px; padding:1px 6px; margin-left:6px; vertical-align:middle; }
+.sc-fu-rate { font-size:11px; color:var(--text-3); }
+.sc-fu-list { display:flex; flex-direction:column; gap:6px; }
+.sc-fu-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 13px; background:var(--card); border:1px solid var(--border); border-radius:11px; cursor:pointer; box-shadow:var(--shadow-sm); transition:border-color 0.15s; }
+html[data-theme="dark"] .sc-fu-row { background:rgba(255,255,255,0.04); }
+.sc-fu-row:hover { border-color:var(--accent-bdr); }
+.sc-fu-row > svg { color:var(--text-3); flex-shrink:0; }
+.sc-fu-main { min-width:0; }
+.sc-fu-name { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sc-fu-meta { font-size:11px; color:var(--text-3); margin-top:2px; }
 
 /* Search & Visibility */
 .sv-dist-bar { display:flex; height:14px; border-radius:7px; overflow:hidden; gap:2px; margin-bottom:10px; }

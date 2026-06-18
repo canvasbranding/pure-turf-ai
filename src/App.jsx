@@ -250,6 +250,7 @@ const SC_METRICS = {
   emails:    { label: 'Emails Sent',    unit: 'count',      format: 'number',   cadence: 'cumulative', get: r => r.emails },
   avgDeal:   { label: 'Avg Deal Value', unit: 'dollars',    format: 'currency', cadence: 'rate',       get: r => (r.won > 0 ? Math.round(r.revenue / r.won) : null) },
   programs:  { label: 'Programs Sold',  unit: 'count',      format: 'number',   cadence: 'cumulative', get: r => r.programsTotal },
+  followUpRate: { label: 'Follow-Up Rate', unit: 'percentage', format: 'percent', cadence: 'rate',    get: r => r.followUpRate },
 };
 
 // Pacing status thresholds (ratio of actual to expected-by-today). Configurable.
@@ -1957,11 +1958,17 @@ function ScGoalForm({ initial, reps, currentUser, isManager, onSave, onClose, bu
 
 function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }) {
   const [activity, setActivity] = React.useState(null);
+  const [followups, setFollowups] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [goals, setGoals] = React.useState([]);
   const [form, setForm] = React.useState(null);   // goal being created/edited
   const [saving, setSaving] = React.useState(false);
   const isManager = !!perms?.scorecardTeam;
+
+  React.useEffect(() => {
+    // Follow-up health is period-independent (open deals gone cold) — fetch once.
+    fetch('/.netlify/functions/scorecard-followups').then(r => r.json()).then(setFollowups).catch(() => {});
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1998,8 +2005,10 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
   const emailsOff = (activity?.unavailable || []).includes('emails');
   const callsOff  = (activity?.unavailable || []).includes('calls');
 
+  const fuByName = followups?.reps || {};
   const rows = board.map(r => {
     const a = actByName[r.name] || {};
+    const fu = fuByName[r.name] || {};
     const calls = a.calls ?? 0, emails = a.emails ?? 0;
     const won = r.won || 0;
     return {
@@ -2008,6 +2017,11 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
       leads: r.leads || 0, won, closeRate: r.closeRate,
       revenue: r.revenue || 0,
       programsTotal: progByName[r.name]?.total || 0,
+      followUpRate: fu.followUpRate ?? null,
+      needsFollowUp: fu.needsFollowUp ?? 0,
+      staleEstimates: fu.staleEstimates ?? 0,
+      openDeals: fu.open ?? 0,
+      topDeals: fu.topDeals || [],
       perWin: won > 0 ? Math.round((calls + emails) / won) : null,
     };
   }).sort((a, b) => b.activity - a.activity);
@@ -2065,7 +2079,32 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
           {SNAP.map(s => <div key={s.k} className="sc-snap"><div className="sc-snap-lbl">{s.label}</div><div className="sc-snap-val">{loading && (s.k==='calls') ? '…' : s.v}</div></div>)}
         </div>
 
-        <button className="dv-ai-btn" style={{marginTop:16}} onClick={() => sendMessage(`Coach me on my sales scorecard for ${rangeLabel}. I have ${myRow?.leads||0} leads, ${myRow?.won||0} won, ${myRow?.closeRate??'–'}% close rate, ${myRow ? fmt$(myRow.revenue) : '$0'} revenue, ${myRow?.calls||0} calls. ${myGoals.length ? `My goals: ${myGoals.map(g=>`${SC_METRICS[g.metric_key]?.label} target ${g.target_value}`).join(', ')}.` : ''} Give me: my status, biggest risk, best opportunity, and my top 3 actions today.`)}>
+        {/* Needs follow-up — the actionable "what to do" list, grounded in real cold deals */}
+        {followups && myRow && (
+          <>
+            <div className="sc-section-row" style={{marginTop:18}}>
+              <div className="dv-section-label" style={{margin:0}}>Needs Follow-Up {myRow.needsFollowUp > 0 && <span className="sc-fu-count">{myRow.needsFollowUp}</span>}</div>
+              {myRow.followUpRate != null && <span className="sc-fu-rate">{myRow.followUpRate}% of open deals current</span>}
+            </div>
+            {myRow.topDeals.length === 0 ? (
+              <div className="sc-empty">No overdue follow-ups. Nice work — every open deal has recent activity.</div>
+            ) : (
+              <div className="sc-fu-list">
+                {myRow.topDeals.map((d, i) => (
+                  <div key={i} className="sc-fu-row" onClick={() => sendMessage(`Help me write a follow-up for my deal "${d.name}" (${fmt$(d.amount)}, ${d.stage}, ${d.daysSince == null ? 'never contacted' : `${d.daysSince} days cold`}). What should I say and what's the next step?`)}>
+                    <div className="sc-fu-main">
+                      <div className="sc-fu-name">{d.name}{d.isEstimate && <span className="rep-tag">estimate</span>}</div>
+                      <div className="sc-fu-meta">{fmt$(d.amount)} · {d.daysSince == null ? 'never contacted' : `${d.daysSince}d cold`}</div>
+                    </div>
+                    <Icon name="arrowR" size={12}/>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        <button className="dv-ai-btn" style={{marginTop:16}} onClick={() => sendMessage(`Coach me on my sales scorecard for ${rangeLabel}. I have ${myRow?.leads||0} leads, ${myRow?.won||0} won, ${myRow?.closeRate??'–'}% close rate, ${myRow ? fmt$(myRow.revenue) : '$0'} revenue, ${myRow?.calls||0} calls.${myRow?.needsFollowUp ? ` I have ${myRow.needsFollowUp} open deals with no follow-up in 7+ days${myRow.topDeals.length ? `, biggest: ${myRow.topDeals.slice(0,5).map(d=>`${d.name} (${fmt$(d.amount)}, ${d.daysSince==null?'never contacted':`${d.daysSince}d cold`})`).join('; ')}` : ''}.` : ''}${myGoals.length ? ` My goals: ${myGoals.map(g=>`${SC_METRICS[g.metric_key]?.label} target ${g.target_value}`).join(', ')}.` : ''} Give me: my status, biggest risk, best opportunity, and my top 3 specific actions today (name the exact deals to follow up first).`)}>
           <span>What should I do today?</span>
           <Icon name="arrowR" size={13}/>
         </button>
@@ -2173,8 +2212,12 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
         })}
       </div>
 
-      <button className="dv-ai-btn" onClick={() => sendMessage(`Give me a full team scorecard analysis for ${rangeLabel} — who's putting in the activity, who's converting it, and who needs coaching.`)}>
-        <span>Ask AI for coaching insights</span>
+      <button className="dv-ai-btn" onClick={() => {
+        const totalGap = rows.reduce((s, r) => s + (r.needsFollowUp || 0), 0);
+        const worst = rows.filter(r => r.needsFollowUp > 0).sort((a, b) => b.needsFollowUp - a.needsFollowUp).slice(0, 3).map(r => `${r.name.split(' ')[0]} (${r.needsFollowUp})`).join(', ');
+        sendMessage(`Give me a sales team scorecard analysis for ${rangeLabel} — who's ahead/on track/behind/at risk, who needs coaching, and the biggest opportunity today.${totalGap ? ` Across the team there are ${totalGap} open deals with no follow-up in 7+ days (most: ${worst}).` : ''} Make it specific: name reps and deals, and suggest 1:1 talking points.`);
+      }}>
+        <span>Ask AI for team coaching</span>
         <Icon name="arrowR" size={13}/>
       </button>
       <div style={{height:32}}/>
