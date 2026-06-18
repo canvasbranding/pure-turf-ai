@@ -1085,9 +1085,23 @@ html[data-theme="dark"] .goal-card { background:rgba(255,255,255,0.04); }
 /* Goal settings rows */
 .goal-settings-grid { display:flex; flex-direction:column; gap:1px; background:var(--border); border-radius:var(--r-sm); overflow:hidden; }
 .goal-setting-row {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:13px 16px; background:var(--card); gap:16px;
+  display:flex; flex-direction:column;
+  padding:13px 16px; background:var(--card); gap:10px;
 }
+.gs-row-main { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.gs-track { display:flex; flex-direction:column; gap:5px; }
+.gs-track-none { font-size:11px; color:var(--text-3); font-style:italic; }
+.gs-track-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.gs-track-val { font-size:12.5px; font-weight:600; color:var(--text); }
+.gs-track-of { font-size:11px; font-weight:400; color:var(--text-3); }
+.gs-track-pill { font-size:10.5px; font-weight:600; white-space:nowrap; }
+.gs-track-bar { position:relative; height:5px; border-radius:3px; background:var(--surface-hi); }
+.gs-track-fill { height:100%; border-radius:3px; transition:width .3s var(--ease); }
+.gs-track-fill.gb-good { background:var(--green); }
+.gs-track-fill.gb-warn { background:#C8902E; }
+.gs-track-fill.gb-bad  { background:var(--red); }
+.gs-track-fill.gb-none { background:var(--text-3); }
+.gs-track-bar .gs-track-pace { position:absolute; top:-2px; width:2px; height:9px; background:var(--text); opacity:0.55; border-radius:1px; }
 html[data-theme="dark"] .goal-setting-row { background:rgba(255,255,255,0.04); }
 .gs-info { flex:1; min-width:0; }
 .gs-label { font-size:13px; font-weight:500; color:var(--text); margin-bottom:2px; }

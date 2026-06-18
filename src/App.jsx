@@ -1263,6 +1263,10 @@ function AreaGoalForm({ areaKey, orgGoals, saveOrgGoals }) {
   const area = GOAL_AREAS.find(a => a.key === areaKey);
   const targets = orgGoals?.[areaKey] || {};
   const [msg, setMsg] = React.useState('');
+  const [ytd, setYtd] = React.useState(null);
+  React.useEffect(() => {
+    fetch('/.netlify/functions/stats?range=ytd').then(r => r.json()).then(setYtd).catch(() => {});
+  }, []);
   const onSave = async (id, raw) => {
     const v = parseFloat(raw);
     if (isNaN(v)) return;
@@ -1270,30 +1274,63 @@ function AreaGoalForm({ areaKey, orgGoals, saveOrgGoals }) {
     setMsg(ok ? '✓ Saved — live for the whole team' : '⚠ Could not save (check your access)');
     setTimeout(() => setMsg(''), 2800);
   };
+  const fmtVal = (format, v) => {
+    if (v == null) return '–';
+    if (format === 'currency') return fmtCurrencyShort(v);
+    if (format === 'percent') return `${Math.round(v)}%`;
+    return Math.round(v).toLocaleString();
+  };
   const cadenceDesc = { annual:'Annual target — paced against the year', monthly:'Target per month', rate:'Target rate', snapshot:'Target level' };
+  const statusWord = { good:'on pace', warn:'slightly behind', bad:'behind pace' };
+  const rows = area.metrics.map(m => ({ m, target: targets[m.id], actual: ytd ? m.getActual(ytd) : null }));
+  const tracked = rows.filter(r => r.target != null).length;
+  const onPace = rows.filter(r => { const p = goalProgress(r.m, r.target, r.actual); return p && p.paced; }).length;
   return (
     <div className="admin-section">
       <div className="admin-section-hdr">
         <div className="admin-section-label">{area.label} targets · {new Date().getFullYear()}</div>
-        <div className="admin-section-hint">Set by {area.owner} · shared with the whole team instantly</div>
+        <div className="admin-section-hint">Set by {area.owner} · shared with the whole team instantly{tracked > 0 ? ` · ${ytd ? `${onPace}/${tracked} on pace` : 'loading pace…'}` : ''}</div>
       </div>
       <div className="goal-settings-grid">
-        {area.metrics.map(m => (
-          <div key={m.id} className="goal-setting-row">
-            <div className="gs-info">
-              <div className="gs-label">{m.label}</div>
-              <div className="gs-desc">{cadenceDesc[m.cadence]}</div>
+        {rows.map(({ m, target, actual }) => {
+          const prog = goalProgress(m, target, actual);
+          const paceLeft = prog && (m.cadence === 'annual' || m.cadence === 'monthly')
+            ? Math.min(100, Math.round((prog.expected / (m.cadence === 'monthly' ? target * 12 : target)) * 100)) : null;
+          return (
+            <div key={m.id} className="goal-setting-row">
+              <div className="gs-row-main">
+                <div className="gs-info">
+                  <div className="gs-label">{m.label}</div>
+                  <div className="gs-desc">{cadenceDesc[m.cadence]}</div>
+                </div>
+                <div className="gs-input-wrap">
+                  {m.format === 'currency' && <span className="gs-unit">$</span>}
+                  <input type="number" className="gs-input" defaultValue={target ?? ''}
+                    onBlur={e => onSave(m.id, e.target.value)}/>
+                  {m.format === 'percent' && <span className="gs-suffix">%</span>}
+                </div>
+              </div>
+              <div className="gs-track">
+                {target == null ? (
+                  <span className="gs-track-none">No target set yet</span>
+                ) : (
+                  <>
+                    <div className="gs-track-head">
+                      <span className="gs-track-val">{fmtVal(m.format, actual)}<span className="gs-track-of"> / {fmtVal(m.format, target)} YTD</span></span>
+                      <span className={`gs-track-pill gs-${prog?.status || 'none'}`}>{prog ? `${prog.pct}% · ${statusWord[prog.status] || ''}` : '—'}</span>
+                    </div>
+                    <div className="gs-track-bar">
+                      <div className={`gs-track-fill gb-${prog?.status || 'none'}`} style={{ width: `${Math.min(100, prog?.pct || 0)}%` }}/>
+                      {paceLeft != null && <div className="gs-track-pace" style={{ left: `${paceLeft}%` }} title="where we should be today"/>}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="gs-input-wrap">
-              {m.format === 'currency' && <span className="gs-unit">$</span>}
-              <input type="number" className="gs-input" defaultValue={targets[m.id] ?? ''}
-                onBlur={e => onSave(m.id, e.target.value)}/>
-              {m.format === 'percent' && <span className="gs-suffix">%</span>}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-      <div className="admin-note">{msg || 'Changes save when you click out of a field — instantly live across every dashboard.'}</div>
+      <div className="admin-note">{msg || 'Saves when you click out of a field — instantly live. Full pacing &amp; trends live in the Goals section.'}</div>
     </div>
   );
 }
