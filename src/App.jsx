@@ -84,7 +84,7 @@ const DEFAULT_PERMISSIONS = {
   sales_manager:{ googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: true,  goalAdmin: false, teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  rescue: true, rescueTeam: true,  manageUsers: false },
   sales:        { googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: false, goalAdmin: false, teamGoals: false, financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: false, rescue: true, rescueTeam: false, manageUsers: false },
 };
-const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', finance:'Finance', mondayBrief:'Mon. Brief', adminPanel:'Admin Panel', goalAdmin:'Goal Admin', teamGoals:'Team Goals', financeGoals:'Finance Goals', salesGoals:'Sales Goals', scorecard:'Scorecard', scorecardTeam:'Team Scorecard', rescue:'Revenue Rescue', rescueTeam:'Team Rescue', manageUsers:'Manage Users' };
+const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', finance:'Finance', mondayBrief:'Mon. Brief', adminPanel:'Admin Area', goalAdmin:'Goal Admin', teamGoals:'Team Goals', financeGoals:'Finance Goals', salesGoals:'Sales Goals', scorecard:'Scorecard', scorecardTeam:'Team Scorecard', rescue:'Revenue Rescue', rescueTeam:'Team Rescue', manageUsers:'Manage Users' };
 const ROLE_LABELS = { admin:'Admin', owner:'Owner', marketing:'Marketing', executive:'Executive', sales_manager:'Sales Mgr', sales:'Sales' };
 
 // Friendly names for data sources — used by the data-health banner and tile error states
@@ -1607,6 +1607,7 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
               <div className="admin-section-hdr">
                 <div className="admin-section-label">Module access per user</div>
                 <div className="admin-section-hint">Override default role permissions for individual users.</div>
+                <div className="admin-section-hint" style={{marginTop:6}}>“Admin Area” only opens the goals &amp; budget tabs. <strong>Permissions, Users, and the Query Log stay restricted to the Admin role (you)</strong> regardless of these toggles.</div>
               </div>
               <div className="perm-table">
                 <div className="perm-row perm-hdr">
