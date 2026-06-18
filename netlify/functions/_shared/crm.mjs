@@ -64,16 +64,46 @@ export const HS_SOURCE_LABELS = {
   OFFLINE: 'Offline / Manual Entry',
 };
 
-// Blended lead source for a deal. Prefer the human-tagged True Lead Source
-// (granular, e.g. "Google PPC - Search"); fall back to HubSpot's auto-captured
-// Original Traffic Source (coarse but ~100% populated) so attribution works even
-// when reps haven't tagged. Returns { source, auto } where auto=true means the
-// value came from the automatic fallback, not a human tag.
+// Normalize the many raw source strings into ONE clean set of channel buckets. The
+// manual True Lead Source and the auto Original Traffic Source use different
+// vocabularies ("Google PPC - Search" vs "Paid Search", "Organic Google" vs
+// "Organic Search"), which fragments Google across 6+ tiny categories. Collapsing
+// them lets Google read as the real driver it is. Order matters — most specific first.
+const CHANNEL_RULES = [
+  [/lsa|ppc|paid.?search|google ?ads|adwords|\bsem\b/i, 'Google Ads'],
+  [/organic.?(google|search)|\bseo\b/i,                 'Organic Search'],
+  [/business profile|\bgbp\b|\bgmb\b|google ?maps|\bmaps\b/i, 'Google Business Profile'],
+  [/direct.?mail|\bmail\b|postcard|\beddm\b/i,          'Direct Mail'],
+  [/meta|facebook|instagram|\bfb\b|paid.?social/i,      'Paid Social'],
+  [/social/i,                                           'Organic Social'],
+  [/referr|word.?of.?mouth|\bwom\b/i,                   'Referral'],
+  [/email/i,                                            'Email'],
+  [/yard ?sign|truck|door|flyer|signage/i,             'Field / Signage'],
+  [/other.?campaign/i,                                  'Other Campaign'],
+  [/offline|manual/i,                                   'Phone / Offline'],
+  [/direct.?traffic|^direct$|typed/i,                   'Website / Direct'],
+];
+export function normalizeChannel(s) {
+  if (!s) return null;
+  for (const [re, label] of CHANNEL_RULES) if (re.test(s)) return label;
+  return null;
+}
+
+// Lead source for a deal, normalized to a clean channel bucket. Prefer the human-tagged
+// True Lead Source when present (ground truth — it can name offline channels HubSpot's
+// web tracking can't see), else fall back to the auto-captured Original Traffic Source
+// (~100% populated). Returns { source, auto } where auto=true means it came from the
+// automatic fallback. NOTE: ~68% of deals auto-capture as OFFLINE (phone/import with no
+// web session) — Google-driven callers land there, so "Phone / Offline" is undercounted
+// toward Google until call tracking is in place.
 export function leadSourceOf(props) {
   const manual = props.true_lead_source?.trim();
-  if (manual) return { source: manual, auto: false };
+  if (manual) return { source: normalizeChannel(manual) || manual, auto: false };
   const raw = props.hs_analytics_source?.trim();
-  if (raw) return { source: HS_SOURCE_LABELS[raw] || raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()), auto: true };
+  if (raw) {
+    const label = HS_SOURCE_LABELS[raw] || raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    return { source: normalizeChannel(raw) || normalizeChannel(label) || label, auto: true };
+  }
   return { source: 'Unknown', auto: true };
 }
 

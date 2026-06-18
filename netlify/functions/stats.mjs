@@ -204,28 +204,6 @@ export const handler = async (event) => {
 
 
 
-  // ── TEMP DIAGNOSTIC: lead-source attribution discrepancy ────────────────────
-  if (event.queryStringParameters?.debug === 'leadsource') {
-    const props = 'dealname,dealstage,pipeline,createdate,true_lead_source,hs_analytics_source';
-    const { rows } = await fetchDealsInPipelines(HUBSPOT_TOKEN, ACTIVE_PIPELINES, props);
-    const sales = rows.filter(d => d.properties.pipeline === PIPELINE_2026_SALES);
-    const tally = (arr, fn) => { const m = {}; arr.forEach(d => { const k = fn(d) || '(empty)'; m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]); };
-    const manualSet = sales.filter(d => d.properties.true_lead_source?.trim());
-    const autoSet   = sales.filter(d => d.properties.hs_analytics_source?.trim());
-    // deals whose MANUAL tag mentions mail — what does HubSpot's auto-capture say they really are?
-    const mailTagged = sales.filter(d => /mail/i.test(d.properties.true_lead_source || ''));
-    const out = {
-      totalSalesDeals: sales.length,
-      withManualTag: manualSet.length,
-      withAutoSource: autoSet.length,
-      manualTagDistribution: tally(sales, d => d.properties.true_lead_source?.trim()),
-      autoSourceDistribution: tally(sales, d => d.properties.hs_analytics_source?.trim()),
-      mailTagged_count: mailTagged.length,
-      mailTagged_realAutoSource: tally(mailTagged, d => d.properties.hs_analytics_source?.trim()),
-    };
-    return { statusCode: 200, headers, body: JSON.stringify(out, null, 2) };
-  }
-
   const rangeKey = event.queryStringParameters?.range || 'mtd';
   const isWarm = event.queryStringParameters?.warm === '1'; // keep-warm forces a real recompute
   const { date_from, date_to } = getDateRange(rangeKey);
