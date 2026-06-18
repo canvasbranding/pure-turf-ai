@@ -4320,8 +4320,8 @@ function AppInner() {
                 <div className="chat-messages" ref={msgsRef}>
                   {messages.length === 0 && (
                     <div className="chat-empty">
-                      <div className="ce-mark"><PTMark size={40} color="var(--accent)"/></div>
-                      <div className="ce-title">Good {greet}, {currentUser?.name?.split(' ')[0]}.</div>
+                      <div className="ai-orb-wrap" aria-hidden="true"><div className="ai-orb"><span className="ai-orb-spec"/></div></div>
+                      <div className="ce-title">Good {greet}, <span className="ce-name">{currentUser?.name?.split(' ')[0]}</span>.</div>
                       <div className="ce-sub">Ask me anything about Pure Turf's performance. I have live access to Google Ads, GBP, and your HubSpot pipeline.</div>
                     </div>
                   )}
