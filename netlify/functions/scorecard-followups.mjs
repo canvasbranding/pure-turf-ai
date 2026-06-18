@@ -61,27 +61,30 @@ export default async (req) => {
       const sinceTouch = lastContact ? daysAgo(lastContact) : ageDays; // never touched → fall back to age
       const isEstimate = stage.toLowerCase().includes('estimate');
 
-      const R = reps[owner] || (reps[owner] = { name: OWNER_NAMES[owner], open: 0, chaseable: 0, needsFollowUp: 0, neverTouched: 0, staleOld: 0, deals: [] });
+      const R = reps[owner] || (reps[owner] = { name: OWNER_NAMES[owner], open: 0, chaseable: 0, neverContacted: 0, wentQuiet: 0, staleOld: 0, deals: [] });
       R.open++;
       if (ageDays != null && ageDays > ANCIENT_DAYS) {
-        R.staleOld++;                                          // ancient/dead — review or close-lost (not active follow-up)
+        R.staleOld++;                                          // ancient/dead — review or close-lost
       } else if (ageDays != null && ageDays >= MIN_AGE_DAYS) {
         R.chaseable++;                                         // past the 48h SLA, still active
-        if (sinceTouch != null && sinceTouch >= FOLLOWUP_STALE_DAYS) {
-          R.needsFollowUp++;
-          if (!everTouched) R.neverTouched++;                 // 48h+ old with zero logged contact
-          R.deals.push({ name: p.dealname || 'Unnamed deal', amount: Math.round(parseFloat(p.amount) || 0), stage, daysSince: ds, ageDays, isEstimate, neverTouched: !everTouched });
+        if (!everTouched) {
+          R.neverContacted++;                                 // 48h+ old with ZERO logged contact — the sharp miss
+          R.deals.push({ name: p.dealname || 'Unnamed deal', amount: Math.round(parseFloat(p.amount) || 0), stage, daysSince: ds, ageDays, isEstimate });
+        } else if (sinceTouch != null && sinceTouch >= FOLLOWUP_STALE_DAYS) {
+          R.wentQuiet++;                                       // contacted once, but not in 48h (softer signal)
         }
       }
     }
 
-    // Per rep: rank the chase list (biggest $ first), cap, and compute a follow-up rate
-    // over the ACTIVE window only (not the ancient pile).
+    // Per rep: the call-list = never-contacted deals, biggest $ first. "Contacted rate"
+    // = share of active deals that have at least had first contact (the trustworthy number).
     const byName = {};
     for (const R of Object.values(reps)) {
       R.deals.sort((a, b) => b.amount - a.amount);
       R.topDeals = R.deals.slice(0, 8);
-      R.followUpRate = R.chaseable > 0 ? Math.round(((R.chaseable - R.needsFollowUp) / R.chaseable) * 100) : null;
+      R.needsFollowUp = R.neverContacted; // back-compat: primary headline = never-contacted
+      R.contactedRate = R.chaseable > 0 ? Math.round(((R.chaseable - R.neverContacted) / R.chaseable) * 100) : null;
+      R.followUpRate = R.contactedRate;   // back-compat alias
       delete R.deals;
       byName[R.name] = R;
     }
