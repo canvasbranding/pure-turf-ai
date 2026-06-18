@@ -6,12 +6,13 @@
 import { PIPELINE_2026_SALES, ACTIVE_PIPELINES, OWNER_NAMES, NON_SALES_STAFF, DEAL_STAGE_NAMES, fetchDealsInPipelines } from './_shared/crm.mjs';
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
-// Team SLA: contact within 48 hours. Real leads here get a logged deal-level touch within
-// minutes, so notes_last_contacted is a trustworthy signal. "Needs follow-up" = an open
-// deal past the SLA with no touch in 48h. Deals older than ANCIENT are a separate
-// review/close pile (absorbs the auto-generated/import estimate backlog).
-const FOLLOWUP_STALE_DAYS = 2;  // 48h SLA — no logged touch in this long → overdue
-const MIN_AGE_DAYS = 2;         // a deal must be at least 48h old to be "overdue"
+// NOTE: this is NOT the team's speed-to-lead SLA (contact within 1 hour) — that needs a
+// lead-arrival timestamp that doesn't exist in HubSpot yet (deals are created at
+// estimate-sent time, not lead-arrival). This is an estimate FOLLOW-UP worklist: open
+// estimates with no follow-up logged on the deal, ranked by value. Deals older than
+// ANCIENT are a separate review/close pile (auto-generated/import backlog).
+const FOLLOWUP_STALE_DAYS = 2;  // ignore an estimate's first couple days before flagging
+const MIN_AGE_DAYS = 2;         // a deal must be at least this old to be on the worklist
 const ANCIENT_DAYS = 75;        // older than this → review/close pile, not the active list
 
 async function fetchStageMap() {

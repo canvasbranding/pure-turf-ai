@@ -2068,11 +2068,11 @@ function RepScorecardBody({ repRow, repEmail, repName, repGoals, rangeLabel, loa
       {followupsLoaded && repRow && (
         <>
           <div className="sc-section-row" style={{marginTop:18}}>
-            <div className="dv-section-label" style={{margin:0}}>No Contact in 48h {repRow.needsFollowUp > 0 && <span className="sc-fu-count">{repRow.needsFollowUp}</span>}</div>
-            {repRow.followUpRate != null && <span className="sc-fu-rate">{repRow.followUpRate}% of active deals contacted</span>}
+            <div className="dv-section-label" style={{margin:0}}>Estimates — No Follow-Up Logged {repRow.needsFollowUp > 0 && <span className="sc-fu-count">{repRow.needsFollowUp}</span>}</div>
+            {repRow.followUpRate != null && <span className="sc-fu-rate">{repRow.followUpRate}% of active estimates touched</span>}
           </div>
           {repRow.topDeals.length === 0 ? (
-            <div className="sc-empty">Every active deal has had first contact within 48 hours. 💪</div>
+            <div className="sc-empty">Every active estimate has a logged follow-up. 💪</div>
           ) : (
             <div className="sc-fu-list">
               {repRow.topDeals.map((d, i) => (
@@ -2239,7 +2239,7 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
           { label: 'Team Revenue', v: fmt$(teamRev) },
           { label: 'New Customers', v: teamWon },
           { label: 'Close Rate', v: liveStats?.hubspot?.closeRate != null ? `${liveStats.hubspot.closeRate}%` : '–' },
-          { label: 'No Contact 48h', v: followups ? teamGap : '…', warn: teamGap > 0 },
+          { label: 'No Follow-Up', v: followups ? teamGap : '…', warn: teamGap > 0 },
           { label: 'Goals On Pace', v: activeGoals.length ? `${onPace}/${activeGoals.length}` : '–' },
         ];
         return (
