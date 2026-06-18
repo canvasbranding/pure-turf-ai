@@ -89,6 +89,39 @@ export function normalizeChannel(s) {
   return null;
 }
 
+// Aircall tracking-number → lead source. Pure Turf advertises a different phone number
+// per channel, so the dialed number (CONTACT.last_used_aircall_phone_number) is the
+// truest signal of where a PHONE lead came from — and ~78% of tracked calls hit a Google
+// Business Profile number. These calls are invisible to hs_analytics_source (it's web-
+// session only and logs every call as OFFLINE), so this map is what surfaces Google's
+// real weight. Extend it as numbers are added/retired — no other code change needed.
+export const PHONE_SOURCE_MAP = {
+  '+16157851849': 'Google Business Profile', // Nashville / 445 Atlas Dr
+  '+16156568772': 'Google Business Profile', // Brentwood / 5301 Virginia Way
+  '+16294010924': 'Google Business Profile', // Murfreesboro / 1354 W College
+  '+16152825118': 'Google Business Profile', // Franklin / 100 Confederate Dr
+  // Direct-mail + (future) LSA-split numbers go here as they're confirmed, e.g.:
+  // '+16158806451': 'Direct Mail',
+};
+
+// Lead source for a CONTACT, normalized to a clean channel bucket. Priority:
+//   1) Aircall tracking number (mapped)  — phone leads; biggest + most accurate signal
+//   2) True Lead Source (rep-tagged)      — granular manual tag when present
+//   3) Original Traffic Source (web)      — auto-captured web session (OFFLINE for calls)
+// Returns { source, basis } where basis ∈ phone|manual|web|none.
+export function contactSourceOf(props) {
+  const num = (props.last_used_aircall_phone_number || '').trim();
+  if (num && PHONE_SOURCE_MAP[num]) return { source: PHONE_SOURCE_MAP[num], basis: 'phone' };
+  const manual = props.true_lead_source?.trim();
+  if (manual) return { source: normalizeChannel(manual) || manual, basis: 'manual' };
+  const raw = props.hs_analytics_source?.trim();
+  if (raw) {
+    const label = HS_SOURCE_LABELS[raw] || raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    return { source: normalizeChannel(raw) || normalizeChannel(label) || label, basis: 'web' };
+  }
+  return { source: 'Unknown', basis: 'none' };
+}
+
 // Lead source for a deal, normalized to a clean channel bucket. Prefer the human-tagged
 // True Lead Source when present (ground truth — it can name offline channels HubSpot's
 // web tracking can't see), else fall back to the auto-captured Original Traffic Source

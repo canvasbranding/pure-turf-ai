@@ -1007,34 +1007,24 @@ function PipelineView({ liveStats, statsLoading, dateRange, sendMessage }) {
         </>
       )}
 
-      {/* Lead sources — True Lead Source (rep-tagged) blended with HubSpot's auto source */}
-      {h?.leadSources?.length > 0 && (() => {
-        const maxSrc = Math.max(...h.leadSources.map(s => s.count), 1);
-        const attributed = h.attributedLeads ?? 0;
-        const attributedPct = h.newLeads > 0 ? Math.round((attributed / h.newLeads) * 100) : 0;
-        const taggedPct = h.newLeads > 0 ? Math.round((h.taggedLeads / h.newLeads) * 100) : 0;
+      {/* Lead sources — contact-level, Aircall-aware (phone calls → real channel) */}
+      {liveStats?.leadSources?.sources?.length > 0 && (() => {
+        const ls = liveStats.leadSources;
+        const maxSrc = Math.max(...ls.sources.map(s => s.count), 1);
+        const phonePct = ls.total ? Math.round((ls.basis?.phone || 0) / ls.total * 100) : 0;
         return (
           <>
             <div className="dv-section-label">
               By Source
-              <span className="dv-section-note">{attributedPct}% attributed · {h.taggedLeads} rep-tagged</span>
+              <span className="dv-section-note">{ls.total.toLocaleString()} leads · {phonePct}% by call</span>
             </div>
-            {taggedPct < 50 && (
-              <div className="data-health data-health-ok" role="status" style={{marginBottom:10, cursor:'pointer', paddingTop:0}}
-                onClick={() => sendMessage(`Most of this period's lead sources are auto-detected from HubSpot's Original Traffic Source rather than rep-tagged True Lead Source. Which leads are auto-only, and how do we get reps to tag campaign-level detail?`)}>
-                <span>Mostly auto-attributed — have reps set <strong>True Lead Source</strong> for campaign-level detail (e.g. which Google campaign). Tap for how.</span>
-              </div>
-            )}
             <div className="dv-funnel">
-              {h.leadSources.map(s => (
+              {ls.sources.map(s => (
                 <div key={s.source} className={`dv-funnel-row${s.unknown ? ' dv-lost' : ''}`}
                   onClick={() => sendMessage(s.unknown
-                    ? `${s.count} of our ${h.newLeads} new leads this period have no source at all (neither True Lead Source nor an Original Traffic Source). Which reps or stages are they in?`
-                    : `Tell me about leads from "${s.source}" this period — how many, who's working them, and how they're converting.`)}>
-                  <div className="dv-funnel-label">
-                    {s.unknown ? 'Unknown' : s.source}
-                    {s.autoOnly && !s.unknown && <span className="rep-tag">auto</span>}
-                  </div>
+                    ? `${s.count} of this period's leads have no source signal at all (no Aircall tracking number, no True Lead Source, no web origin). Where might they be coming from?`
+                    : `Tell me about leads from "${s.source}" this period — how many, who's working them, and how they convert.`)}>
+                  <div className="dv-funnel-label">{s.unknown ? 'Unknown' : s.source}</div>
                   <div className="dv-funnel-bar-wrap">
                     <div className="dv-funnel-bar" style={{width:`${Math.round(s.count / maxSrc * 100)}%`}}/>
                   </div>

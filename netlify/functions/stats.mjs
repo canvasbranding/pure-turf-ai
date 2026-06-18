@@ -1,7 +1,7 @@
 // Pure Turf AI — Dashboard Stats + Goals Data Function
 import {
   PIPELINE_2026_SALES, PIPELINE_2026_COMMERCIAL, ACTIVE_PIPELINES, DEAL_STAGE_NAMES, DEAL_STAGES_WON, DEAL_STAGES_LOST,
-  OWNER_NAMES, CLOSE_RATE_EXCLUDED, REP_NOTES, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, fetchDealsInPipelines, leadSourceOf, hubspotGet,
+  OWNER_NAMES, CLOSE_RATE_EXCLUDED, REP_NOTES, NON_SALES_STAFF, EXCLUDED_CAMPAIGNS, getDateRange, fetchDealsInPipelines, leadSourceOf, contactSourceOf, hubspotGet,
 } from './_shared/crm.mjs';
 import { fetchQuickBooks } from './_shared/quickbooks.mjs';
 
@@ -47,6 +47,43 @@ async function fetchHubSpotDeals(date_from) {
     sales:      computeDealMetrics(salesDeals, date_from, getStageName),
     commercial: computeDealMetrics(commDeals, date_from, getStageName),
   };
+}
+
+// Lead-source breakdown computed from CONTACTS (not deals), so it can read the Aircall
+// tracking number — the only field that attributes phone leads to their real channel.
+// Web/import contacts attribute via True Lead Source then Original Traffic Source. We
+// exclude the RealGreen CSV import (source_data_1 = 'import') since that's the existing
+// customer book being migrated, not newly-generated leads.
+async function fetchLeadSources(date_from) {
+  const url = 'https://api.hubapi.com/crm/v3/objects/contacts/search';
+  const properties = ['last_used_aircall_phone_number', 'true_lead_source', 'hs_analytics_source', 'hs_analytics_source_data_1', 'createdate'];
+  const bySource = {};
+  const basis = { phone: 0, manual: 0, web: 0, none: 0 };
+  let total = 0, after = undefined, capped = false;
+  for (let page = 0; page < 25; page++) { // cap 2,500 most-recent leads to bound latency
+    const body = {
+      filterGroups: [{ filters: [{ propertyName: 'createdate', operator: 'GTE', value: String(new Date(date_from).getTime()) }] }],
+      properties, sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }], limit: 100, ...(after ? { after } : {}),
+    };
+    const res = await hubspotGet(url, HUBSPOT_TOKEN, { init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } });
+    const data = await res.json();
+    const rows = data.results || [];
+    for (const c of rows) {
+      const p = c.properties || {};
+      if ((p.hs_analytics_source_data_1 || '') === 'import') continue; // skip migrated existing-customer book
+      const { source, basis: b } = contactSourceOf(p);
+      bySource[source] = (bySource[source] || 0) + 1;
+      basis[b] = (basis[b] || 0) + 1;
+      total++;
+    }
+    after = data.paging?.next?.after;
+    if (!after) break;
+    if (page === 24) capped = true;
+  }
+  const sources = Object.entries(bySource)
+    .map(([source, count]) => ({ source, count, pct: total ? Math.round(count / total * 100) : 0, unknown: source === 'Unknown' }))
+    .sort((a, b) => (a.unknown !== b.unknown ? (a.unknown ? 1 : -1) : b.count - a.count));
+  return { sources, total, basis, capped };
 }
 
 // Compute the full metric set for one pipeline's deals. Used for both 2026 pipelines.
@@ -221,12 +258,13 @@ export const handler = async (event) => {
 
   // Meta (facebook_ads) disabled — that Windsor connector slot was reallocated to
   // QuickBooks. Re-add fetchWindsor('facebook_ads', …) here to restore Meta.
-  const [googleResult, gbpResult, hubspotResult, rgResult, financeResult] = await Promise.allSettled([
+  const [googleResult, gbpResult, hubspotResult, rgResult, financeResult, leadSrcResult] = await Promise.allSettled([
     fetchWindsor('google_ads', date_from, date_to),
     fetchWindsor('google_my_business', date_from, date_to),
     fetchHubSpotDeals(date_from),
     fetchRGServices(HUBSPOT_TOKEN, date_from),
     fetchQuickBooks(WINDSOR_KEY, 'this_year'), // finance tiles are always YTD (P&L is annual)
+    fetchLeadSources(date_from),
   ]);
 
   const stats = { dateRange: rangeKey, dateFrom: date_from, dateTo: date_to, fetchedAt: new Date().toISOString(), errors: {} };
@@ -310,6 +348,11 @@ export const handler = async (event) => {
     stats.hubspot  = { total: s.total, newLeads: s.newLeads, activeLeads: s.activeLeads, revenue: s.revenue, closeRate: s.closeRate, wonCount: s.wonCount, lostCount: s.lostCount, stageBreakdown: s.stageBreakdown, repLeaderboard: s.repLeaderboard, recentDeals: s.recentDeals, leadSources: s.leadSources, taggedLeads: s.taggedLeads, attributedLeads: s.attributedLeads, createdTrend: s.createdTrend };
     stats.hubspotCommercial = { total: c.total, newLeads: c.newLeads, activeLeads: c.activeLeads, revenue: c.revenue, closeRate: c.closeRate, wonCount: c.wonCount, lostCount: c.lostCount, stageBreakdown: c.stageBreakdown, repLeaderboard: c.repLeaderboard, recentDeals: c.recentDeals, leadSources: c.leadSources, taggedLeads: c.taggedLeads, attributedLeads: c.attributedLeads, createdTrend: c.createdTrend };
   } else { stats.errors.hubspot = hubspotResult.reason?.message; }
+
+  // ── Lead sources (contact-level, Aircall-aware) ─────────────
+  if (leadSrcResult.status === 'fulfilled') {
+    stats.leadSources = leadSrcResult.value;
+  } else { stats.errors.leadSources = leadSrcResult.reason?.message; }
 
   const googleSpend = stats.google?.spend || 0;
   stats.adSpend = { total: googleSpend, google: googleSpend, meta: 0 };
