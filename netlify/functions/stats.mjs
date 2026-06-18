@@ -19,7 +19,7 @@ async function fetchWindsor(datasource, from, to) {
 }
 
 async function fetchHubSpotDeals(date_from) {
-  const props = 'dealname,amount,dealstage,pipeline,closedate,createdate,hubspot_owner_id,true_lead_source,hs_analytics_source';
+  const props = 'dealname,amount,dealstage,pipeline,closedate,createdate,hubspot_owner_id,true_lead_source,hs_analytics_source,hs_v2_date_entered_1271775085';
 
   // Fetch ALL pipelines' stage definitions once — covers both 2026 Sales and Commercial,
   // which have different stage ids. Flatten into one id→label map.
@@ -136,6 +136,17 @@ function computeDealMetrics(deals, date_from, getStageName) {
     const name = getStageName(d.properties.dealstage).toLowerCase();
     return name.includes('closed lost') || name.includes('closedlost') || DEAL_STAGES_LOST.includes(d.properties.dealstage);
   };
+  // A "stale estimate" = an estimate that's sat untouched past the realistic close window.
+  // These are de-facto losses reps never marked Closed Lost; counting them stops close rate
+  // from measuring "won vs the losses we bothered to record" (~67%) instead of reality (~50%).
+  const STALE_ESTIMATE_DAYS = 45;
+  const now = Date.now();
+  const yearStart = `${new Date(now).getFullYear()}-01-01`;
+  const isStaleEstimate = (d) => {
+    if (!getStageName(d.properties.dealstage).toLowerCase().includes('estimate')) return false;
+    const entered = d.properties.hs_v2_date_entered_1271775085; // sales-pipeline Estimate-Sent entry date
+    return entered ? (now - new Date(entered).getTime()) > STALE_ESTIMATE_DAYS * 864e5 : false;
+  };
 
   const newLeads    = deals.filter(d => d.properties.createdate >= date_from).length;
   const wonDeals    = deals.filter(isWon);
@@ -153,12 +164,15 @@ function computeDealMetrics(deals, date_from, getStageName) {
   const openValue     = openDeals.reduce((s, d) => s + (parseFloat(d.properties.amount) || 0), 0);
   const revenue       = wonInRange.reduce((s, d) => s + (parseFloat(d.properties.amount) || 0), 0);
 
-  // Close rate: won / (won + lost) for deals CLOSED in this period (excludes open deals and Kurt/Wyatt)
+  // Close rate: won / (won + lost + stale estimates). YTD-anchored (not period-windowed) so
+  // it's a stable health metric. Stale estimates are counted as the losses they really are.
   const isExcludedOwner = (d) => CLOSE_RATE_EXCLUDED[d.properties.hubspot_owner_id];
-  const coreWon   = wonInRange.filter(d => !isExcludedOwner(d)).length;
-  const coreLost  = lostInRange.filter(d => !isExcludedOwner(d)).length;
-  const closeRate = (coreWon + coreLost) > 0
-    ? Math.round((coreWon / (coreWon + coreLost)) * 100) : null;
+  const crWon   = wonDeals.filter(d => !isExcludedOwner(d) && d.properties.closedate >= yearStart).length;
+  const crLost  = lostDeals.filter(d => !isExcludedOwner(d) && d.properties.closedate >= yearStart).length;
+  const crStale = openDeals.filter(d => !isExcludedOwner(d) && isStaleEstimate(d)).length;
+  const closeRate = (crWon + crLost + crStale) > 0
+    ? Math.round((crWon / (crWon + crLost + crStale)) * 100) : null;
+  const staleEstimates = openDeals.filter(isStaleEstimate).length;
 
   // Per-stage breakdown with resolved names. Open stages = current pipeline (point in
   // time). Closed Won/Lost are PERIOD-FILTERED to deals closed in the range — otherwise
@@ -181,7 +195,7 @@ function computeDealMetrics(deals, date_from, getStageName) {
     const ownerId = d.properties.hubspot_owner_id;
     if (NON_SALES_STAFF.has(ownerId)) return;
     const name = OWNER_NAMES[ownerId] || 'Unassigned';
-    if (!repStats[name]) repStats[name] = { leads: 0, won: 0, lost: 0, revenue: 0, open: 0, ownerId };
+    if (!repStats[name]) repStats[name] = { leads: 0, won: 0, lost: 0, revenue: 0, open: 0, crWon: 0, crLost: 0, crStale: 0, ownerId };
     if (d.properties.createdate >= date_from) repStats[name].leads++;
     if (isWon(d) && d.properties.closedate >= date_from) {
       repStats[name].won++;
@@ -191,12 +205,18 @@ function computeDealMetrics(deals, date_from, getStageName) {
     } else if (!isWon(d) && !isLost(d)) {
       repStats[name].open++;
     }
+    // YTD-anchored close-rate inputs (stale estimates count as losses) — independent of the
+    // selected range so each rep's close rate is a stable, honest conversion figure.
+    if (isWon(d) && d.properties.closedate >= yearStart) repStats[name].crWon++;
+    else if (isLost(d) && d.properties.closedate >= yearStart) repStats[name].crLost++;
+    else if (!isWon(d) && !isLost(d) && isStaleEstimate(d)) repStats[name].crStale++;
   });
   const repLeaderboard = Object.entries(repStats)
     .map(([name, s]) => ({
       name, leads: s.leads, won: s.won, lost: s.lost, open: s.open,
       revenue: Math.round(s.revenue),
-      closeRate: (s.won + s.lost) > 0 ? Math.round(s.won / (s.won + s.lost) * 100) : null,
+      closeRate: (s.crWon + s.crLost + s.crStale) > 0 ? Math.round(s.crWon / (s.crWon + s.crLost + s.crStale) * 100) : null,
+      staleEstimates: s.crStale,
       note: REP_NOTES[s.ownerId] || null,
       excluded: !!CLOSE_RATE_EXCLUDED[s.ownerId],
       excludeReason: CLOSE_RATE_EXCLUDED[s.ownerId] || null,
@@ -263,7 +283,7 @@ function computeDealMetrics(deals, date_from, getStageName) {
     .slice(-8)
     .map(([month, count]) => ({ month, count }));
 
-  return { total: deals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, openValue: Math.round(openValue), stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads, attributedLeads, createdTrend };
+  return { total: deals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, staleEstimates, wonCount, lostCount, openCount, openValue: Math.round(openValue), stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads, attributedLeads, createdTrend };
 }
 
 // In-memory result cache. Netlify reuses warm function instances, so this persists
@@ -421,7 +441,7 @@ export const handler = async (event) => {
     // Primary tile + dashboard = 2026 Sales (residential). Commercial is exposed
     // alongside so the Pipeline view can toggle to it.
     stats.pipeline = { total: s.total, sub: 'open + closed (all years)', dir: '' };
-    stats.hubspot  = { total: s.total, newLeads: s.newLeads, activeLeads: s.activeLeads, revenue: s.revenue, closeRate: s.closeRate, wonCount: s.wonCount, lostCount: s.lostCount, openValue: s.openValue, stageBreakdown: s.stageBreakdown, repLeaderboard: s.repLeaderboard, recentDeals: s.recentDeals, leadSources: s.leadSources, taggedLeads: s.taggedLeads, attributedLeads: s.attributedLeads, createdTrend: s.createdTrend };
+    stats.hubspot  = { total: s.total, newLeads: s.newLeads, activeLeads: s.activeLeads, revenue: s.revenue, closeRate: s.closeRate, staleEstimates: s.staleEstimates, wonCount: s.wonCount, lostCount: s.lostCount, openValue: s.openValue, stageBreakdown: s.stageBreakdown, repLeaderboard: s.repLeaderboard, recentDeals: s.recentDeals, leadSources: s.leadSources, taggedLeads: s.taggedLeads, attributedLeads: s.attributedLeads, createdTrend: s.createdTrend };
     stats.hubspotCommercial = { total: c.total, newLeads: c.newLeads, activeLeads: c.activeLeads, revenue: c.revenue, closeRate: c.closeRate, wonCount: c.wonCount, lostCount: c.lostCount, stageBreakdown: c.stageBreakdown, repLeaderboard: c.repLeaderboard, recentDeals: c.recentDeals, leadSources: c.leadSources, taggedLeads: c.taggedLeads, attributedLeads: c.attributedLeads, createdTrend: c.createdTrend };
     stats.sourceQuality = hubspotResult.value.sourceQuality || [];
     // Join paid-media cost so the "Google Ads" bucket shows CPL/CPA, not just revenue.
