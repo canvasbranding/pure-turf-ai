@@ -94,7 +94,7 @@ export default async (req) => {
       R.count++;
       if (scored.flags.includes('staleEstimate')) R.stale++;
       if (!scored.everTouched) R.neverContacted++;
-      if (r.revenueImpact !== 'Low') R.atRisk += r.value;
+      if (!(r.stage === 'Estimate Sent' && r.daysInStage >= 45)) R.atRisk += r.value; // winnable only (exclude 45+ day dead estimates)
       salesScored.push({ scored, r });
     }
     salesScored.sort((a, b) => b.scored.score - a.scored.score);
@@ -129,7 +129,7 @@ export default async (req) => {
           id: `coach:${R.name.replace(/\s+/g, '')}`,
           type: 'coaching_note', category: 'sales', roleScope: 'manager',
           title: `${R.name}: follow-up health`,
-          summary: `${R.count} open · ${R.stale} stale estimate${R.stale === 1 ? '' : 's'} · ${R.neverContacted} never contacted · $${Math.round(R.atRisk).toLocaleString()} at risk`,
+          summary: `${R.count} open · ${R.stale} stale estimate${R.stale === 1 ? '' : 's'} · ${R.neverContacted} never contacted · $${Math.round(R.atRisk).toLocaleString()} winnable`,
           priorityScore: Math.min(90, 25 + Math.round(R.atRisk / 20000) + R.stale),
           ownerName: R.name,
           estimatedImpact: R.atRisk,

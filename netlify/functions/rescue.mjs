@@ -25,6 +25,13 @@ function ownerNameForEmail(email) {
 
 const URGENCY_RANK = { high: 0, medium: 1, low: 2 };
 
+// "Winnable" vs "revive": an estimate sitting 45+ days is effectively dead (same cutoff as
+// close rate). Winnable = still-in-play deals; dead ones go in the separate clean-up pile so
+// they don't inflate the headline revenue figure. Expected recovery ≈ winnable × real close rate.
+const DEAD_DAYS = 45;
+const EXPECTED_CLOSE = 0.37;
+const isDead = (it) => it.stage === 'Estimate Sent' && it.daysInStage != null && it.daysInStage >= DEAD_DAYS;
+
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response('', { status: 200, headers: CORS });
   try {
@@ -96,7 +103,7 @@ export default async (req) => {
 
       // Per-rep health (counts everything, even snoozed/contacted)
       const repName = scored.ownerName;
-      const R = byRep[repName] || (byRep[repName] = { name: repName, assigned: 0, contacted: 0, staleEstimates: 0, neverContacted: 0, revenueAtRisk: 0, rescueCount: 0 });
+      const R = byRep[repName] || (byRep[repName] = { name: repName, assigned: 0, contacted: 0, staleEstimates: 0, neverContacted: 0, winnable: 0, staleValue: 0, staleCount: 0, rescueCount: 0 });
       R.assigned++;
       if (scored.everTouched) R.contacted++; else R.neverContacted++;
       if (scored.flags.includes('staleEstimate')) R.staleEstimates++;
@@ -108,7 +115,8 @@ export default async (req) => {
       const inQueue = (scored.flags.length > 0 || scored.score >= 6) && !dismissed && !snoozed && !contacted;
       if (inQueue) {
         R.rescueCount++;
-        if (item.revenueImpact !== 'Low') R.revenueAtRisk += item.value;
+        if (isDead(item)) { R.staleCount++; R.staleValue += item.value; } // dead estimate → revive/clean-up pile
+        else R.winnable += item.value;                                    // still-in-play → winnable
       }
       allItems.push({ ...item, _inQueue: inQueue, _repName: repName });
     }
@@ -122,21 +130,27 @@ export default async (req) => {
     const queue = scoped.filter(i => i._inQueue).map(({ _inQueue, _repName, ...rest }) => rest);
     const snoozedItems = scoped.filter(i => i.state?.snoozed_until && new Date(i.state.snoozed_until).getTime() > now).map(({ _inQueue, _repName, ...rest }) => rest);
 
-    // Leadership rollup (full set)
+    // Leadership rollup (full set). "Winnable" headline = still-in-play deals only; dead
+    // estimates broken out as a clean-up pile so they don't inflate the figure.
+    const inQ = allItems.filter(i => i._inQueue);
+    const winnable = inQ.filter(i => !isDead(i)).reduce((t, i) => t + i.value, 0);
     const leadership = {
-      revenueAtRisk: allItems.filter(i => i._inQueue && i.revenueImpact !== 'Low').reduce((t, i) => t + i.value, 0),
-      openRescue: allItems.filter(i => i._inQueue).length,
+      winnable,
+      revenueAtRisk: winnable,                          // back-compat alias = winnable now
+      expectedRecovery: Math.round(winnable * EXPECTED_CLOSE),
+      staleValue: inQ.filter(isDead).reduce((t, i) => t + i.value, 0),
+      staleCount: inQ.filter(isDead).length,
+      openRescue: inQ.length,
       newUncontacted: allItems.filter(i => i.flags.includes('newUncontacted')).length,
       staleEstimates: allItems.filter(i => i.flags.includes('staleEstimate')).length,
       highValueStuck: allItems.filter(i => i.flags.includes('highValueStuck')).length,
-      openUntouchedValue: allItems.filter(i => !i.state && i.flags.includes('estimateNoFollowup')).reduce((t, i) => t + i.value, 0),
       duplicates: allItems.filter(i => i.flags.includes('duplicate')).length,
     };
 
     const repHealth = Object.values(byRep)
       .filter(r => !NON_SALES_STAFF.has(Object.keys(OWNER_NAMES).find(id => OWNER_NAMES[id] === r.name)))
-      .map(r => ({ ...r, contactedRate: r.assigned > 0 ? Math.round((r.contacted / r.assigned) * 100) : null }))
-      .sort((a, b) => b.revenueAtRisk - a.revenueAtRisk);
+      .map(r => ({ ...r, revenueAtRisk: r.winnable, expectedRecovery: Math.round(r.winnable * EXPECTED_CLOSE), contactedRate: r.assigned > 0 ? Math.round((r.contacted / r.assigned) * 100) : null }))
+      .sort((a, b) => b.winnable - a.winnable);
 
     return new Response(JSON.stringify({
       ok: true, role: isManager ? 'manager' : 'rep', repName: myName,

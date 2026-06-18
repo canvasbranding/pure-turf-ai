@@ -2433,10 +2433,10 @@ function RevenueRescueView({ liveStats, sendMessage, currentUser, perms, focusId
       {isManager && data && (
         <div className="dv-kpi-row">
           {[
-            { label: 'Revenue at Risk', val: rqFmt$(L.revenueAtRisk || 0), sub: 'open rescue value' },
-            { label: 'Open Rescue Items', val: L.openRescue || 0, sub: 'across the team' },
+            { label: 'Winnable Revenue', val: rqFmt$(L.winnable || 0), sub: 'still in play' },
+            { label: 'Expected Recovery', val: rqFmt$(L.expectedRecovery || 0), sub: '@ ~37% close rate' },
+            { label: 'To Revive', val: rqFmt$(L.staleValue || 0), sub: `${L.staleCount || 0} dead estimates` },
             { label: 'New Uncontacted', val: L.newUncontacted || 0, sub: 'no contact logged' },
-            { label: 'Stale Estimates', val: L.staleEstimates || 0, sub: '>7d in stage' },
           ].map(k => (
             <div key={k.label} className="dv-kpi-card">
               <div className="dv-kpi-label">{k.label}</div>
@@ -2458,7 +2458,7 @@ function RevenueRescueView({ liveStats, sendMessage, currentUser, perms, focusId
               <div className="dv-col-num">Cont%</div>
               <div className="dv-col-num">Stale</div>
               <div className="dv-col-num">Rescue</div>
-              <div className="dv-col-num">At Risk</div>
+              <div className="dv-col-num">Winnable</div>
             </div>
             {data.byRep.map(r => (
               <div key={r.name} className={`dv-table-row${repFilter === r.name ? ' rq-row-active' : ''}`} onClick={() => setRepFilter(repFilter === r.name ? null : r.name)}>
@@ -2546,7 +2546,7 @@ function RescueMiniWidget({ email, onNav, variant = 'banner' }) {
   }, [email]);
   if (!data) return null;
   const queue = data.queue || [];
-  const atRisk = data.role === 'manager' ? (data.leadership?.revenueAtRisk || 0) : queue.filter(i => i.revenueImpact !== 'Low').reduce((t, i) => t + i.value, 0);
+  const atRisk = data.role === 'manager' ? (data.leadership?.winnable || 0) : queue.filter(i => !(i.stage === 'Estimate Sent' && i.daysInStage >= 45)).reduce((t, i) => t + i.value, 0);
   if (queue.length === 0) return null;
 
   if (variant === 'today') {
@@ -2578,7 +2578,7 @@ function RescueMiniWidget({ email, onNav, variant = 'banner' }) {
   return (
     <button className="rq-banner" onClick={() => onNav()}>
       <Icon name="rescue" size={15}/>
-      <span><strong>{queue.length}</strong> {data.role === 'manager' ? 'deals' : 'of your deals'} need follow-up · <strong>{rqFmt$(atRisk)}</strong> at risk</span>
+      <span><strong>{queue.length}</strong> {data.role === 'manager' ? 'deals' : 'of your deals'} need follow-up · <strong>{rqFmt$(atRisk)}</strong> winnable</span>
       <span className="rq-banner-cta">Open Revenue Rescue →</span>
     </button>
   );
