@@ -2757,6 +2757,42 @@ function FinanceView({ sendMessage }) {
 }
 
 // ── SEARCH & VISIBILITY (SEO / Local / AEO via Search Atlas) ────────────
+// Expandable list of the tracked keywords, grouped by metro. The rank-tracker REST API
+// gives us the keyword set but not each term's live position (MCP-only), so this shows
+// what we monitor — paired with the aggregate band counts in "Where We Rank" above.
+function KeywordAccordion({ terms }) {
+  const [open, setOpen] = React.useState(false);
+  if (!terms?.length) return null;
+  const CITIES = [['nashville', 'Nashville'], ['brentwood', 'Brentwood'], ['murfreesboro', 'Murfreesboro'], ['franklin', 'Franklin']];
+  const groups = {}; const other = [];
+  terms.forEach(t => {
+    const hit = CITIES.find(([k]) => t.includes(k));
+    if (hit) (groups[hit[1]] = groups[hit[1]] || []).push(t); else other.push(t);
+  });
+  const ordered = CITIES.map(([, label]) => [label, groups[label]]).filter(([, v]) => v?.length);
+  if (other.length) ordered.push(['Other / Nearby', other]);
+  return (
+    <div className="kw-acc">
+      <button className="kw-acc-toggle" onClick={() => setOpen(o => !o)}>
+        <span className="kw-acc-caret">{open ? '▾' : '▸'}</span>
+        <span>View all {terms.length} tracked keywords</span>
+        <span className="kw-acc-hint">Nashville · Brentwood · Murfreesboro · Franklin</span>
+      </button>
+      {open && (
+        <div className="kw-acc-body">
+          {ordered.map(([label, list]) => (
+            <div key={label} className="kw-acc-group">
+              <div className="kw-acc-group-lbl">{label} <span>{list.length}</span></div>
+              <div className="kw-acc-chips">{list.map((t, i) => <span key={i} className="kw-chip">{t}</span>)}</div>
+            </div>
+          ))}
+          <div className="kw-acc-note">These are the terms Search Atlas tracks for us across our metros. Live position per term lives in Search Atlas; this view shows the set we monitor plus the aggregate ranking bands above.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SearchVisibilityView({ sendMessage }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -2841,6 +2877,7 @@ function SearchVisibilityView({ sendMessage }) {
                         <div key={s.lbl} className="sv-dist-leg"><span className="sv-dist-dot" style={{background:s.c}}/>{s.lbl} <strong>{s.n}</strong></div>
                       ))}
                     </div>
+                    <KeywordAccordion terms={data.trackedTerms?.all}/>
                   </>
                 );
               })()}
@@ -2852,6 +2889,55 @@ function SearchVisibilityView({ sendMessage }) {
               )}
             </>
           ); })()}
+
+          {/* Momentum — how rankings have improved over time */}
+          {data?.momentum?.serpTrend?.length > 1 && (() => {
+            const m = data.momentum;
+            const last = m.serpTrend[m.serpTrend.length - 1];
+            const top3Now = last.top3, top3First = m.firstTop3;
+            const n1Now = last.n1, n1First = m.firstN1;
+            const fmtDate = d => d ? d.slice(5).replace('-', '/') : '';
+            return (
+              <>
+                <div className="dv-section-label" style={{marginTop:18}}>Momentum · How We've Improved</div>
+                <div className="dv-kpi-row">
+                  <div className="dv-kpi-card">
+                    <div className="dv-kpi-label">Avg Map Rank</div>
+                    <div className="dv-kpi-val">#{m.mapNow}{m.mapPrev > m.mapNow && <span className="sv-delta up"> ▲{m.mapPrev - m.mapNow}</span>}</div>
+                    <div className="dv-kpi-sub">{m.mapPrev != null ? `up from #${m.mapPrev}` : 'this period'}</div>
+                  </div>
+                  <div className="dv-kpi-card">
+                    <div className="dv-kpi-label">Keywords Up</div>
+                    <div className="dv-kpi-val" style={{color:'#10B981'}}>{m.keywordsUp ?? '–'}</div>
+                    <div className="dv-kpi-sub">{m.keywordsDown ?? 0} down · {m.keywordsUnchanged ?? 0} flat</div>
+                  </div>
+                  <div className="dv-kpi-card">
+                    <div className="dv-kpi-label">In Top 3</div>
+                    <div className="dv-kpi-val">{top3Now}{top3First != null && top3Now > top3First && <span className="sv-delta up"> ▲{top3Now - top3First}</span>}</div>
+                    <div className="dv-kpi-sub">{top3First != null ? `from ${top3First}` : 'tracked'}</div>
+                  </div>
+                  <div className="dv-kpi-card">
+                    <div className="dv-kpi-label">Ranking #1</div>
+                    <div className="dv-kpi-val">{n1Now}{n1First != null && n1Now > n1First && <span className="sv-delta up"> ▲{n1Now - n1First}</span>}</div>
+                    <div className="dv-kpi-sub">{n1First != null ? `from ${n1First}` : 'tracked'}</div>
+                  </div>
+                </div>
+                <div className="dv-section-label" style={{marginTop:6}}>
+                  Top-3 &amp; #1 Rankings Over Time
+                  <span className="dv-section-note" style={{opacity:1}}><span style={{color:'#4F82A0'}}>● Top 3</span>&nbsp;&nbsp;<span style={{color:'#10B981'}}>┄ #1</span></span>
+                </div>
+                <TrendChart data={m.serpTrend.map(p => p.top3)} secondary={m.serpTrend.map(p => p.n1)} color="#4F82A0" color2="#10B981"
+                  valueFmt={v => String(Math.round(v))} labels={[fmtDate(m.serpTrend[0].date), '', fmtDate(last.date)]} />
+                {m.trafficTrend?.length > 1 && (
+                  <>
+                    <div className="dv-section-label" style={{marginTop:4}}>Estimated Monthly Search Traffic</div>
+                    <TrendChart data={m.trafficTrend.map(p => p.traffic)} color="#10B981"
+                      valueFmt={v => String(Math.round(v))} labels={[fmtDate(m.trafficTrend[0].date), '', fmtDate(m.trafficTrend[m.trafficTrend.length - 1].date)]} />
+                  </>
+                )}
+              </>
+            );
+          })()}
 
           {/* GBP locations */}
           {data?.gbpLocations?.length > 0 && (

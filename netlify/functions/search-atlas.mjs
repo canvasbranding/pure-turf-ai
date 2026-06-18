@@ -86,12 +86,35 @@ export default async (req) => {
     const ranked = page1 + (cur.serp_11_20 || 0) + (cur.serp_21_50 || 0) + (cur.serp_51_100 || 0);
     const ud = rt.keywords_up_down_report || {};
     out.keywordWins = { atTop1: at1, top3, page1, ranked, improved: ud.keywords_up ?? null, declined: ud.keywords_down ?? null };
-    // Breadth of terms we track/rank for (strings; the REST API doesn't expose per-term
-    // positions here, so we show the count + a sample, paired with the win counts above).
+    // Breadth of terms we track/rank for. The REST API exposes the keyword STRINGS but
+    // NOT each term's live position (that's MCP-only), so we surface the full deduped list
+    // for the accordion + the aggregate band counts above — never a fabricated per-term rank.
     const tk = Array.isArray(rt.tracked_keywords) ? rt.tracked_keywords.filter(k => typeof k === 'string') : [];
-    out.trackedTerms = { count: tk.length, sample: tk.slice(0, 14) };
+    const deduped = [...new Set(tk.map(s => s.trim().toLowerCase()))].sort();
+    out.trackedTerms = { count: deduped.length, sample: tk.slice(0, 14), all: deduped };
     // Search-visibility trend (oldest→newest for a sparkline).
     out.visibilityTrend = (rt.search_visibility_report || []).slice(0, 21).map(p => p.sv).reverse();
+
+    // ── Momentum: how rankings have improved over time (oldest→newest) ──────
+    const serp = [...so].reverse().slice(-30).map(p => ({
+      date: p.date,
+      n1: p.serp_1 || 0,
+      top3: (p.serp_1 || 0) + (p.serp_2_3 || 0),
+      page1: (p.serp_1 || 0) + (p.serp_2_3 || 0) + (p.serp_4_10 || 0),
+    }));
+    const traffic = [...(rt.estimated_traffic_report || [])].reverse().slice(-30).map(p => ({ date: p.date, traffic: p.traffic || 0 }));
+    out.momentum = {
+      serpTrend: serp,
+      trafficTrend: traffic,
+      keywordsUp: ud.keywords_up ?? null,
+      keywordsDown: ud.keywords_down ?? null,
+      keywordsUnchanged: ud.keywords_unchanged ?? null,
+      mapPrev: leg.previous_avg_position ?? null,
+      mapNow: leg.current_avg_position ?? rt.average_position ?? null,
+      // First vs latest SERP snapshot, for a plain-English "since we started" line.
+      firstN1: serp.length ? serp[0].n1 : null,
+      firstTop3: serp.length ? serp[0].top3 : null,
+    };
   } else if (rank.status !== 200) out.errors.local = `rank ${rank.status}`;
 
   // ── GBP reviews (reputation) — array of { star_rating, count } ──────────
@@ -111,29 +134,6 @@ export default async (req) => {
     });
   } else out.errors.gbp = `gbp ${gbp.status}`;
 
-
-  // ── TEMP probe: find the per-keyword rankings REST endpoint ──────────────
-  if (req.url && req.url.includes('probe=1')) {
-    const SH = 'a2674f92-fc41-41bf-81ad-70090267b775';
-    const cands = [
-      `${HOST.keyword}/api/v1/rank-tracker/keyword/?project_id=78504&page_size=10`,
-      `${HOST.keyword}/api/v1/rank-tracker/keyword-positions/?project_id=78504&page_size=10`,
-      `${HOST.keyword}/api/v1/rank-tracker/serps/?project_id=78504&page_size=10`,
-      `${HOST.keyword}/api/v1/rank-tracker/public/${SH}/`,
-      `${HOST.keyword}/api/v1/rank-tracker/shared/${SH}/`,
-      `${HOST.keyword}/api/v1/rank-tracker/share/${SH}/keywords/`,
-      `https://api.searchatlas.com/api/v1/rank-tracker/keywords/?project_id=78504&page_size=10`,
-      `${HOST.keyword}/api/v1/rank-tracker/?project_id=78504&fields=keywords&page_size=10`,
-    ];
-    const probe = [];
-    for (const u of cands) {
-      const r = await sa(u);
-      const b = r.body;
-      const items = b?.items || b?.results || b?.data;
-      probe.push({ url: u.replace(HOST.keyword, ''), status: r.status, hasItems: Array.isArray(items), itemSample: Array.isArray(items) ? items[0] : (typeof b === 'string' ? b.slice(0, 120) : Object.keys(b || {}).slice(0, 8)) });
-    }
-    out._probe = probe;
-  }
 
   return new Response(JSON.stringify(out), { status: 200, headers: { ...CORS, 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=3600, stale-while-revalidate=86400' } });
 };
