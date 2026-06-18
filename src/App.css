@@ -1091,13 +1091,17 @@ html[data-theme="dark"] .goal-card { background:rgba(255,255,255,0.04); }
   display:flex; gap:4px; margin-bottom:20px;
   background:var(--surface); border:1px solid var(--border);
   border-radius:10px; padding:4px;
+  overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
 }
+.admin-tabs::-webkit-scrollbar { display:none; }
 .admin-tab {
   flex:1; padding:7px 10px; border-radius:7px; border:none;
   background:none; font-family:var(--font); font-size:12.5px;
   color:var(--text-3); cursor:pointer; font-weight:400;
   transition:all 0.15s; white-space:nowrap;
 }
+/* On narrow screens the tabs take natural width and the row scrolls instead of overflowing. */
+@media (max-width:760px) { .admin-tab { flex:0 0 auto; } }
 .admin-tab.active {
   background:var(--card); color:var(--text); font-weight:500;
   box-shadow:var(--shadow-sm);
