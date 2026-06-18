@@ -6,13 +6,13 @@
 import { PIPELINE_2026_SALES, ACTIVE_PIPELINES, OWNER_NAMES, NON_SALES_STAFF, DEAL_STAGE_NAMES, fetchDealsInPipelines } from './_shared/crm.mjs';
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
-// Tunables. The actionable "chase" list = open deals old enough to be overdue (>= MIN_AGE)
-// but not ancient (<= ANCIENT), that have had no deal-level touch in FOLLOWUP_STALE days.
-// Deals older than ANCIENT are a separate "review / close-out" pile (this absorbs the March
-// bulk-import cohort and genuinely-dead estimates) — surfaced honestly, not as "neglect."
-const FOLLOWUP_STALE_DAYS = 21; // no logged touch in this many days → needs a nudge
-const MIN_AGE_DAYS = 10;        // brand-new deals aren't "overdue" yet
-const ANCIENT_DAYS = 75;        // older than this → review/close pile, not the active chase list
+// Team SLA: contact within 48 hours. Real leads here get a logged deal-level touch within
+// minutes, so notes_last_contacted is a trustworthy signal. "Needs follow-up" = an open
+// deal past the SLA with no touch in 48h. Deals older than ANCIENT are a separate
+// review/close pile (absorbs the auto-generated/import estimate backlog).
+const FOLLOWUP_STALE_DAYS = 2;  // 48h SLA — no logged touch in this long → overdue
+const MIN_AGE_DAYS = 2;         // a deal must be at least 48h old to be "overdue"
+const ANCIENT_DAYS = 75;        // older than this → review/close pile, not the active list
 
 async function fetchStageMap() {
   try {
@@ -32,11 +32,10 @@ export default async (req) => {
   if (req.method === 'OPTIONS') return new Response('', { status: 200, headers: CORS });
 
   try {
-    // hs_last_sales_activity_timestamp rolls up activity logged on the deal OR its
-    // associated contacts (so Aircall calls that attach to contacts still count). We use
-    // the most recent of it + notes_last_contacted as "last touch", and never flag a deal
-    // younger than the threshold (a 2-day-old deal isn't "cold").
-    const props = 'dealname,amount,dealstage,pipeline,hubspot_owner_id,createdate,notes_last_contacted,hs_last_sales_activity_timestamp';
+    // notes_last_contacted = last logged call/email/meeting on the deal (reliable here —
+    // real leads get a touch logged within minutes). num_notes = total logged activities
+    // (0 = genuinely never touched on the deal).
+    const props = 'dealname,amount,dealstage,pipeline,hubspot_owner_id,createdate,notes_last_contacted,num_notes';
     const [{ rows }, stageMap] = await Promise.all([
       fetchDealsInPipelines(HUBSPOT_TOKEN, ACTIVE_PIPELINES, props),
       fetchStageMap(),
@@ -55,21 +54,23 @@ export default async (req) => {
       const owner = p.hubspot_owner_id;
       if (!owner || NON_SALES_STAFF.has(owner) || !OWNER_NAMES[owner]) continue;
 
-      const lastTouch = Math.max(ms(p.notes_last_contacted), ms(p.hs_last_sales_activity_timestamp));
       const ageDays = daysAgo(ms(p.createdate));               // how old the deal is
-      const ds = lastTouch ? daysAgo(lastTouch) : null;        // days since last logged touch (null = never)
-      const sinceTouch = lastTouch ? daysAgo(lastTouch) : ageDays; // never touched → fall back to age
+      const lastContact = ms(p.notes_last_contacted);
+      const everTouched = (parseInt(p.num_notes) || 0) > 0 || lastContact > 0;
+      const ds = lastContact ? daysAgo(lastContact) : null;    // days since last logged contact (null = never)
+      const sinceTouch = lastContact ? daysAgo(lastContact) : ageDays; // never touched → fall back to age
       const isEstimate = stage.toLowerCase().includes('estimate');
 
-      const R = reps[owner] || (reps[owner] = { name: OWNER_NAMES[owner], open: 0, chaseable: 0, needsFollowUp: 0, staleOld: 0, deals: [] });
+      const R = reps[owner] || (reps[owner] = { name: OWNER_NAMES[owner], open: 0, chaseable: 0, needsFollowUp: 0, neverTouched: 0, staleOld: 0, deals: [] });
       R.open++;
       if (ageDays != null && ageDays > ANCIENT_DAYS) {
         R.staleOld++;                                          // ancient/dead — review or close-lost (not active follow-up)
       } else if (ageDays != null && ageDays >= MIN_AGE_DAYS) {
-        R.chaseable++;                                         // in the active window
+        R.chaseable++;                                         // past the 48h SLA, still active
         if (sinceTouch != null && sinceTouch >= FOLLOWUP_STALE_DAYS) {
           R.needsFollowUp++;
-          R.deals.push({ name: p.dealname || 'Unnamed deal', amount: Math.round(parseFloat(p.amount) || 0), stage, daysSince: ds, ageDays, isEstimate });
+          if (!everTouched) R.neverTouched++;                 // 48h+ old with zero logged contact
+          R.deals.push({ name: p.dealname || 'Unnamed deal', amount: Math.round(parseFloat(p.amount) || 0), stage, daysSince: ds, ageDays, isEstimate, neverTouched: !everTouched });
         }
       }
     }
