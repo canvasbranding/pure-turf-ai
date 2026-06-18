@@ -2352,7 +2352,7 @@ function RqCopy({ label, text, copied, onCopy }) {
   );
 }
 
-function RevenueRescueView({ liveStats, sendMessage, currentUser, perms }) {
+function RevenueRescueView({ liveStats, sendMessage, currentUser, perms, focusId, onFocusHandled }) {
   const isManager = !!perms?.rescueTeam;
   const email = currentUser?.email || '';
   const [data, setData] = useState(null);
@@ -2369,6 +2369,13 @@ function RevenueRescueView({ liveStats, sendMessage, currentUser, perms }) {
     // visibly does something instead of silently filtering off-screen.
     if (repFilter && queueRef.current) queueRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [repFilter]);
+  // Deep-link from the dashboard "Top priorities" widget: open that exact item's drawer.
+  useEffect(() => {
+    if (!focusId || !data?.queue) return;
+    const item = data.queue.find(q => String(q.dealId) === String(focusId));
+    if (item) setDrawer(item);
+    onFocusHandled?.();
+  }, [focusId, data]);
 
   const load = useCallback(() => {
     if (!email) return;
@@ -2530,23 +2537,29 @@ function RescueMiniWidget({ email, onNav, variant = 'banner' }) {
       <div className="rq-today">
         <div className="rq-today-hdr">
           <div><Icon name="rescue" size={15}/> <strong>Top priorities today</strong></div>
-          <button onClick={onNav}>Open Revenue Rescue →</button>
+          <button onClick={() => onNav()}>Open Revenue Rescue →</button>
         </div>
         <div className="rq-today-list">
           {queue.slice(0, 4).map(i => (
-            <button key={i.dealId} className="rq-today-item" onClick={onNav}>
+            <div key={i.dealId} className="rq-today-item" role="button" tabIndex={0}
+              onClick={() => onNav(i.dealId)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onNav(i.dealId); }}
+              title="Open this in Revenue Rescue">
               <span className={`rq-badge ${RQ_BADGE[i.priorityLevel] || 'rq-low'}`}>{i.priorityLevel}</span>
               <span className="rq-today-name">{i.customer || i.name}</span>
               <span className="rq-today-act">{i.recommendedAction}</span>
               <span className="rq-today-val">{rqFmt$(i.value)}</span>
-            </button>
+              <a className="rq-today-hs" href={i.hubspotUrl} target="_blank" rel="noreferrer"
+                title="Open this deal in HubSpot" onClick={e => e.stopPropagation()}>↗</a>
+              <span className="rq-today-caret" aria-hidden="true">›</span>
+            </div>
           ))}
         </div>
       </div>
     );
   }
   return (
-    <button className="rq-banner" onClick={onNav}>
+    <button className="rq-banner" onClick={() => onNav()}>
       <Icon name="rescue" size={15}/>
       <span><strong>{queue.length}</strong> {data.role === 'manager' ? 'deals' : 'of your deals'} need follow-up · <strong>{rqFmt$(atRisk)}</strong> at risk</span>
       <span className="rq-banner-cta">Open Revenue Rescue →</span>
@@ -3202,6 +3215,7 @@ function AppInner() {
   const [editingGoal,   setEditingGoal]   = useState(null);
   const [adminTab,      setAdminTab]      = useState('goals');
   const [mainView,      setMainView]      = useState('dashboard'); // 'dashboard' | 'goals' // goal id being edited
+  const [rescueFocus,   setRescueFocus]   = useState(null); // dealId to auto-open in Revenue Rescue (deep-link from the Today widget)
   const [messages,      setMessages]      = useState([]);
   const [input,         setInput]         = useState('');
   const [busy,          setBusy]          = useState(false);
@@ -3990,7 +4004,7 @@ function AppInner() {
                 <div className="dash-scroll" key={dateRange}>
 
                   {/* Top priorities today — Revenue Rescue feed */}
-                  {perms.rescue && <RescueMiniWidget email={currentUser?.email} onNav={() => setMainView('rescue')} variant="today"/>}
+                  {perms.rescue && <RescueMiniWidget email={currentUser?.email} onNav={(dealId) => { setRescueFocus(dealId || null); setMainView('rescue'); }} variant="today"/>}
 
                   {/* Metric cards — grouped: Marketing · Sales · Customers */}
                   {visibleTiles.length > 0 && (() => {
@@ -4067,7 +4081,7 @@ function AppInner() {
 
                 {/* REVENUE RESCUE VIEW */}
                 <div className="goals-col" style={{display: mainView === 'rescue' ? undefined : 'none'}}>
-                  {mainView === 'rescue' && <RevenueRescueView liveStats={liveStats} sendMessage={sendMessage} currentUser={currentUser} perms={perms}/>}
+                  {mainView === 'rescue' && <RevenueRescueView liveStats={liveStats} sendMessage={sendMessage} currentUser={currentUser} perms={perms} focusId={rescueFocus} onFocusHandled={() => setRescueFocus(null)}/>}
                 </div>
 
                 {/* SCORECARD VIEW */}
