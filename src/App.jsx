@@ -68,17 +68,22 @@ const USERS = [
 
 const GOAL_ADMIN_EMAILS = ['david@pureturfllc.com', 'kdryden@pureturfllc.com', 'rbone@pureturfllc.com', 'dhamby@pureturfllc.com'];
 const TEAM_GOALS_EMAILS = ['david@pureturfllc.com', 'kdryden@pureturfllc.com', 'rbone@pureturfllc.com', 'dhamby@pureturfllc.com'];
+// Area-specific goal owners (set by name since Kurt & Dave are both "executive").
+// Kurt Dryden → Finance goals · Dave Turner → Sales goals. David Patton sets Company
+// goals via goalAdmin (owner). dhamby = admin, can set everything.
+const FINANCE_GOALS_EMAILS = ['kdryden@pureturfllc.com', 'dhamby@pureturfllc.com'];
+const SALES_GOALS_EMAILS   = ['dturner@pureturfllc.com', 'dhamby@pureturfllc.com'];
 
 const DEFAULT_PERMISSIONS = {
   // finance: hidden for now (QuickBooks integration stays built — flip these to true to restore).
-  admin:        { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: true  },
-  owner:        { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: false },
-  marketing:    { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  manageUsers: false },
-  executive:    { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: false, goalAdmin: true,  teamGoals: true,  manageUsers: false },
-  sales_manager:{ googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: true,  goalAdmin: false, teamGoals: true,  manageUsers: false },
-  sales:        { googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: false, goalAdmin: false, teamGoals: false, manageUsers: false },
+  admin:        { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: true,  salesGoals: true,  manageUsers: true  },
+  owner:        { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, manageUsers: false },
+  marketing:    { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, manageUsers: false },
+  executive:    { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: false, goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, manageUsers: false },
+  sales_manager:{ googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: true,  goalAdmin: false, teamGoals: true,  financeGoals: false, salesGoals: false, manageUsers: false },
+  sales:        { googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: false, goalAdmin: false, teamGoals: false, financeGoals: false, salesGoals: false, manageUsers: false },
 };
-const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', finance:'Finance', mondayBrief:'Mon. Brief', adminPanel:'Admin Panel', goalAdmin:'Goal Admin', teamGoals:'Team Goals', manageUsers:'Manage Users' };
+const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', finance:'Finance', mondayBrief:'Mon. Brief', adminPanel:'Admin Panel', goalAdmin:'Goal Admin', teamGoals:'Team Goals', financeGoals:'Finance Goals', salesGoals:'Sales Goals', manageUsers:'Manage Users' };
 const ROLE_LABELS = { admin:'Admin', owner:'Owner', marketing:'Marketing', executive:'Executive', sales_manager:'Sales Mgr', sales:'Sales' };
 
 // Friendly names for data sources — used by the data-health banner and tile error states
@@ -178,6 +183,59 @@ const GOAL_DEFS = [
   },
 ];
 
+// Area-based goals (server-shared via /goals). Company = David Patton, Finance = Kurt
+// Dryden, Sales = Dave Turner. Each metric tracks a YTD actual vs its set target.
+// cadence: 'annual' = cumulative, pace vs target×yearFraction · 'monthly' = per-month
+// target, pace vs target×monthsElapsed · 'rate'/'snapshot' = compare actual vs target now.
+const GOAL_AREAS = [
+  { key:'company', label:'Company', perm:'goalAdmin',    owner:'David Patton', metrics:[
+    { id:'revenue',         label:'Annual Revenue',  format:'currency', cadence:'annual',   getActual: s => s?.hubspot?.revenue ?? null },
+    { id:'newCustomers',    label:'New Customers',    format:'number',   cadence:'annual',   getActual: s => s?.rgServices?.estNewCustomers ?? null },
+    { id:'activeCustomers', label:'Active Customers', format:'number',   cadence:'snapshot', getActual: s => s?.rgServices?.estActiveCustomers ?? null },
+    { id:'closeRate',       label:'Close Rate',       format:'percent',  cadence:'rate',     getActual: s => s?.hubspot?.closeRate ?? null },
+  ]},
+  { key:'finance', label:'Finance', perm:'financeGoals', owner:'Kurt Dryden', metrics:[
+    { id:'revenue',     label:'Revenue · YTD', format:'currency', cadence:'annual', getActual: s => s?.finance?.revenue ?? null },
+    { id:'grossProfit', label:'Gross Profit',  format:'currency', cadence:'annual', getActual: s => s?.finance?.grossProfit ?? null },
+    { id:'netIncome',   label:'Net Income',    format:'currency', cadence:'annual', getActual: s => s?.finance?.netIncome ?? null },
+    { id:'netMargin',   label:'Net Margin',    format:'percent',  cadence:'rate',   getActual: s => s?.finance?.margin ?? null },
+  ]},
+  { key:'sales', label:'Sales', perm:'salesGoals', owner:'Dave Turner', metrics:[
+    { id:'dealsWon',      label:'Deals Won · YTD', format:'number',   cadence:'annual',   getActual: s => s?.hubspot?.wonCount ?? null },
+    { id:'newLeads',      label:'New Leads / mo',  format:'number',   cadence:'monthly',  getActual: s => s?.hubspot?.newLeads ?? null },
+    { id:'closeRate',     label:'Close Rate',      format:'percent',  cadence:'rate',     getActual: s => s?.hubspot?.closeRate ?? null },
+    { id:'pipelineValue', label:'Pipeline Value',  format:'currency', cadence:'snapshot', getActual: s => s?.hubspot?.openValue ?? null },
+  ]},
+];
+
+// Pacing + progress for one metric given its target and a YTD actual snapshot.
+function goalProgress(metric, target, actual) {
+  if (target == null || target <= 0 || actual == null) return null;
+  const now = new Date();
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const yearFraction = (now - startOfYear) / (365.25 * 864e5); // 0..1
+  const monthsElapsed = now.getMonth() + (now.getDate() / 30); // ~months into year
+  let expected, pct, paced;
+  if (metric.cadence === 'annual') {
+    pct = Math.round((actual / target) * 100);
+    expected = target * yearFraction;
+    paced = actual >= expected;
+  } else if (metric.cadence === 'monthly') {
+    const annualTarget = target * 12;
+    pct = Math.round((actual / annualTarget) * 100);
+    expected = target * monthsElapsed;
+    paced = actual >= expected;
+  } else { // rate | snapshot — compare directly, no time pacing
+    pct = Math.round((actual / target) * 100);
+    expected = target;
+    paced = actual >= target;
+  }
+  // status: green on/ahead, amber within 10% behind, red further behind
+  let status = 'good';
+  if (!paced) status = actual >= expected * 0.9 ? 'warn' : 'bad';
+  return { pct: Math.max(0, pct), expected, paced, status, yearFraction };
+}
+
 function loadGoalTargets() {
   try { return JSON.parse(localStorage.getItem('pt_goal_targets') || '{}'); }
   catch { return {}; }
@@ -239,8 +297,10 @@ function saveLastUser(email) { try { localStorage.setItem('pt_last_user', email)
 function getPerms(email, role, overrides) {
   const base = { ...(DEFAULT_PERMISSIONS[role]||DEFAULT_PERMISSIONS.sales) };
   // Specific users get elevated goal permissions regardless of role
-  if (GOAL_ADMIN_EMAILS.includes(email))  base.goalAdmin  = true;
-  if (TEAM_GOALS_EMAILS.includes(email))  base.teamGoals  = true;
+  if (GOAL_ADMIN_EMAILS.includes(email))     base.goalAdmin    = true;
+  if (TEAM_GOALS_EMAILS.includes(email))     base.teamGoals    = true;
+  if (FINANCE_GOALS_EMAILS.includes(email)) { base.financeGoals = true; base.adminPanel = true; }
+  if (SALES_GOALS_EMAILS.includes(email))   { base.salesGoals   = true; base.adminPanel = true; }
   return { ...base, ...(overrides[email]||{}) };
 }
 
@@ -529,7 +589,7 @@ function CompanyGoalCard({ goal, actual, target, editingGoal, setEditingGoal, se
   );
 }
 
-function GoalsView({ currentUser, liveStats, statsLoading, dateRange, goalTargets, monthlyBudget, repGoals, editingGoal, setEditingGoal, setGoalTargets, sendMessage }) {
+function GoalsView({ currentUser, liveStats, statsLoading, dateRange, goalTargets, monthlyBudget, repGoals, editingGoal, setEditingGoal, setGoalTargets, sendMessage, orgGoals, perms }) {
   const isSales = currentUser?.role === 'sales';
   const isExecOrAdmin = ['admin','owner','marketing','executive'].includes(currentUser?.role);
   const rangeLabel = DATE_RANGES[dateRange]?.label || 'Month to date';
@@ -622,21 +682,79 @@ function GoalsView({ currentUser, liveStats, statsLoading, dateRange, goalTarget
         </div>
       )}
 
-      {/* ── GOALS SECTION: Exec ── */}
+      {/* ── GOALS SECTION: Exec — area-based tracking vs shared targets ── */}
       {(goalsTab === 'goals') && !isSales && (
-        <div className="goals-grid">
-          {GOAL_DEFS.filter(g => g.roles.includes(currentUser?.role)).map(goal => (
-            <CompanyGoalCard key={goal.id} goal={goal}
-              actual={goal.getActual(liveStats)}
-              target={getGoalTarget(goal.id, goalTargets, monthlyBudget)}
-              editingGoal={editingGoal} setEditingGoal={setEditingGoal}
-              setGoalTargets={setGoalTargets} goalTargets={goalTargets}
-              sendMessage={sendMessage}
-            />
-          ))}
-        </div>
+        <GoalTrackingView orgGoals={orgGoals} perms={perms} sendMessage={sendMessage}/>
       )}
       <div style={{ height: 32 }}/>
+    </div>
+  );
+}
+
+// Reads YTD actuals and tracks them against the shared company/finance/sales targets
+// with progress bars, pacing markers (where you should be for this point in the year),
+// and a green/amber/red status. Finance area is gated to finance-cleared viewers.
+function GoalTrackingView({ orgGoals, perms, sendMessage }) {
+  const [ytd, setYtd] = React.useState(null);
+  React.useEffect(() => {
+    fetch('/.netlify/functions/stats?range=ytd').then(r => r.json()).then(setYtd).catch(() => {});
+  }, []);
+  const visible = GOAL_AREAS.filter(a => a.key !== 'finance' || perms?.finance || perms?.financeGoals);
+  const fmtVal = (format, v) => {
+    if (v == null) return '–';
+    if (format === 'currency') return v >= 1000 ? `$${Math.round(v/1000).toLocaleString()}k` : `$${Math.round(v)}`;
+    if (format === 'percent') return `${Math.round(v)}%`;
+    return Math.round(v).toLocaleString();
+  };
+  return (
+    <div className="goal-track">
+      {visible.map(area => {
+        const targets = orgGoals?.[area.key] || {};
+        const rows = area.metrics.map(m => ({ m, target: targets[m.id], actual: ytd ? m.getActual(ytd) : null }));
+        const onPace = rows.filter(r => { const p = goalProgress(r.m, r.target, r.actual); return p && p.paced; }).length;
+        return (
+          <div key={area.key} className="goal-area">
+            <div className="goal-area-hdr">
+              <div className="goal-area-title">{area.label} Goals</div>
+              <div className="goal-area-meta">{onPace}/{rows.length} on pace · set by {area.owner}</div>
+            </div>
+            <div className="goal-area-grid">
+              {rows.map(({ m, target, actual }) => {
+                const prog = goalProgress(m, target, actual);
+                const paceLeft = prog ? Math.min(100, Math.round((prog.expected / (m.cadence === 'monthly' ? target * 12 : target)) * 100)) : null;
+                return (
+                  <div key={m.id} className={`goal-card${prog ? ' gc-' + prog.status : ''}`}
+                    onClick={() => sendMessage(`How are we tracking on the ${area.label.toLowerCase()} goal "${m.label}" — target ${fmtVal(m.format, target)}, currently ${fmtVal(m.format, actual)}? What should we do to hit it?`)}>
+                    <div className="goal-card-lbl">{m.label}</div>
+                    <div className="goal-card-val">{fmtVal(m.format, actual)}<span className="goal-card-target"> / {fmtVal(m.format, target)}</span></div>
+                    <div className="goal-bar-wrap">
+                      <div className={`goal-bar${prog ? ' gb-' + prog.status : ''}`} style={{ width: `${Math.min(100, prog?.pct || 0)}%` }}/>
+                      {paceLeft != null && (m.cadence === 'annual' || m.cadence === 'monthly') && (
+                        <div className="goal-pace-mark" style={{ left: `${paceLeft}%` }} title="where we should be today"/>
+                      )}
+                    </div>
+                    <div className="goal-card-foot">
+                      <span className="goal-card-pct">{prog ? `${prog.pct}%` : '–'}</span>
+                      <span className={`goal-card-status gs-${prog?.status || 'none'}`}>
+                        {!prog ? 'set a target' : prog.status === 'good' ? 'on pace' : prog.status === 'warn' ? 'slightly behind' : 'behind pace'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Sales area gets a won-over-time trend vs the monthly target */}
+            {area.key === 'sales' && ytd?.hubspot?.createdTrend?.length > 1 && (
+              <div className="goal-trend">
+                <div className="goal-trend-lbl">Deals Won · Monthly</div>
+                <TrendChart data={ytd.hubspot.createdTrend.map(p => p.count)} color="#10B981" valueFmt={v => Math.round(v)}
+                  labels={[ytd.hubspot.createdTrend[0]?.month?.slice(5), '', ytd.hubspot.createdTrend.at(-1)?.month?.slice(5)]} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {!ytd && <div className="goal-track-loading">Loading year-to-date actuals…</div>}
     </div>
   );
 }
@@ -1068,7 +1186,48 @@ function PipelineView({ liveStats, statsLoading, dateRange, sendMessage }) {
 }
 
 // ══ ADMIN PANEL ═══════════════════════════════════════════════════════════
-function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleTheme, themeBtnRef, theme, setScreen, perms, permissions, togglePerm, goalTargets, setGoalTargets, monthlyBudget, setMonthlyBudget, repGoals, setRepGoals, adminTab, setAdminTab, pendingUsers, setPendingUsers }) {
+// Set-targets form for one goal area (Company / Finance / Sales). Saves to the shared
+// server store so the whole team tracks against the same numbers.
+function AreaGoalForm({ areaKey, orgGoals, saveOrgGoals }) {
+  const area = GOAL_AREAS.find(a => a.key === areaKey);
+  const targets = orgGoals?.[areaKey] || {};
+  const [msg, setMsg] = React.useState('');
+  const onSave = async (id, raw) => {
+    const v = parseFloat(raw);
+    if (isNaN(v)) return;
+    const ok = await saveOrgGoals(areaKey, { [id]: v });
+    setMsg(ok ? '✓ Saved — live for the whole team' : '⚠ Could not save (check your access)');
+    setTimeout(() => setMsg(''), 2800);
+  };
+  const cadenceDesc = { annual:'Annual target — paced against the year', monthly:'Target per month', rate:'Target rate', snapshot:'Target level' };
+  return (
+    <div className="admin-section">
+      <div className="admin-section-hdr">
+        <div className="admin-section-label">{area.label} targets · {new Date().getFullYear()}</div>
+        <div className="admin-section-hint">Set by {area.owner} · shared with the whole team instantly</div>
+      </div>
+      <div className="goal-settings-grid">
+        {area.metrics.map(m => (
+          <div key={m.id} className="goal-setting-row">
+            <div className="gs-info">
+              <div className="gs-label">{m.label}</div>
+              <div className="gs-desc">{cadenceDesc[m.cadence]}</div>
+            </div>
+            <div className="gs-input-wrap">
+              {m.format === 'currency' && <span className="gs-unit">$</span>}
+              <input type="number" className="gs-input" defaultValue={targets[m.id] ?? ''}
+                onBlur={e => onSave(m.id, e.target.value)}/>
+              {m.format === 'percent' && <span className="gs-suffix">%</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="admin-note">{msg || 'Changes save when you click out of a field — instantly live across every dashboard.'}</div>
+    </div>
+  );
+}
+
+function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleTheme, themeBtnRef, theme, setScreen, perms, permissions, togglePerm, goalTargets, setGoalTargets, monthlyBudget, setMonthlyBudget, repGoals, setRepGoals, adminTab, setAdminTab, pendingUsers, setPendingUsers, orgGoals, saveOrgGoals }) {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const thisYear = new Date().getFullYear();
   const curMonth = new Date().getMonth();
@@ -1191,7 +1350,9 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
 
 
   const availableTabs = [
-    ...(canSetCompGoals ? [{ id:'goals',  label:'Company Goals' }] : []),
+    ...(canSetCompGoals    ? [{ id:'company-goals', label:'Company Goals' }] : []),
+    ...(perms.financeGoals ? [{ id:'finance-goals', label:'Finance Goals' }] : []),
+    ...(perms.salesGoals   ? [{ id:'sales-goals',   label:'Sales Goals'   }] : []),
     ...(canSetCompGoals ? [{ id:'budget', label:'Ad Budget'     }] : []),
     ...(canSetTeamGoals ? [{ id:'team',   label:'Team Goals'    }] : []),
     ...(canManagePerms  ? [{ id:'perms',  label:'Permissions'   }] : []),
@@ -1283,35 +1444,9 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
           {userMsg && <div className="admin-msg">{userMsg}</div>}
 
           {/* ── COMPANY GOALS ── */}
-          {activeTab === 'goals' && (
-            <div className="admin-section">
-              <div className="admin-section-hdr">
-                <div className="admin-section-label">Annual & monthly targets</div>
-                <div className="admin-section-hint">Applied across all dashboards instantly</div>
-              </div>
-              <div className="goal-settings-grid">
-                {GOAL_DEFS.filter(g => g.id !== 'adSpend').map(goal => (
-                  <div key={goal.id} className="goal-setting-row">
-                    <div className="gs-info">
-                      <div className="gs-label">{goal.label}</div>
-                      <div className="gs-desc">{goal.desc}</div>
-                    </div>
-                    <div className="gs-input-wrap">
-                      {goal.unit && <span className="gs-unit">{goal.unit}</span>}
-                      <input type="number" className="gs-input"
-                        defaultValue={getGoalTarget(goal.id, goalTargets, monthlyBudget)}
-                        onBlur={e => {
-                          const v = parseFloat(e.target.value);
-                          if (!isNaN(v)) { const u = { ...goalTargets, [goal.id]: v }; setGoalTargets(u); saveGoalTargets(u); }
-                        }}/>
-                      {goal.suffix && <span className="gs-suffix">{goal.suffix}</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="admin-note">Changes save instantly and reflect across all user dashboards.</div>
-            </div>
-          )}
+          {activeTab === 'company-goals' && <AreaGoalForm areaKey="company" orgGoals={orgGoals} saveOrgGoals={saveOrgGoals}/>}
+          {activeTab === 'finance-goals' && <AreaGoalForm areaKey="finance" orgGoals={orgGoals} saveOrgGoals={saveOrgGoals}/>}
+          {activeTab === 'sales-goals'   && <AreaGoalForm areaKey="sales"   orgGoals={orgGoals} saveOrgGoals={saveOrgGoals}/>}
 
           {/* ── AD BUDGET ── */}
           {activeTab === 'budget' && (
@@ -2086,6 +2221,7 @@ function AppInner() {
   const [goalTargets,   setGoalTargets]   = useState(loadGoalTargets);
   const [monthlyBudget, setMonthlyBudget] = useState(loadMonthlyBudget);
   const [repGoals,      setRepGoals]      = useState(loadRepGoals);
+  const [orgGoals,      setOrgGoals]      = useState(null); // server-shared company/finance/sales goals
   const [editingGoal,   setEditingGoal]   = useState(null);
   const [adminTab,      setAdminTab]      = useState('goals');
   const [mainView,      setMainView]      = useState('dashboard'); // 'dashboard' | 'goals' // goal id being edited
@@ -2414,6 +2550,29 @@ function AppInner() {
   useEffect(() => {
     if (screen === 'app') fetchStats(dateRange);
   }, [screen, dateRange]);
+
+  // Load shared company/finance/sales goals once signed in
+  useEffect(() => {
+    if (!currentUser) return;
+    fetch('/.netlify/functions/goals')
+      .then(r => r.json())
+      .then(d => { if (d.ok) setOrgGoals(d.goals); })
+      .catch(() => {});
+  }, [currentUser]);
+
+  // Save one area's targets (server-authoritative; only authorized users succeed)
+  const saveOrgGoals = useCallback(async (area, targets) => {
+    setOrgGoals(prev => ({ ...(prev || {}), [area]: { ...((prev || {})[area] || {}), ...targets } })); // optimistic
+    try {
+      const res = await fetch('/.netlify/functions/goals', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ area, targets, requester_email: currentUser?.email }),
+      });
+      const d = await res.json();
+      if (d.ok && d.goals) setOrgGoals(d.goals);
+      return d.ok;
+    } catch { return false; }
+  }, [currentUser]);
 
   // Fetch pending users when admin panel opens
   useEffect(() => {
@@ -2903,7 +3062,7 @@ function AppInner() {
                   <GoalsView currentUser={currentUser} liveStats={liveStats} statsLoading={statsLoading}
                     dateRange={dateRange} goalTargets={goalTargets} monthlyBudget={monthlyBudget}
                     repGoals={repGoals} editingGoal={editingGoal} setEditingGoal={setEditingGoal}
-                    setGoalTargets={setGoalTargets} sendMessage={sendMessage}/>
+                    setGoalTargets={setGoalTargets} sendMessage={sendMessage} orgGoals={orgGoals} perms={perms}/>
                 </div>
 
                 {/* GOOGLE ADS VIEW */}
@@ -3087,6 +3246,8 @@ function AppInner() {
           setAdminTab={setAdminTab}
           pendingUsers={pendingUsers}
           setPendingUsers={setPendingUsers}
+          orgGoals={orgGoals}
+          saveOrgGoals={saveOrgGoals}
         />
       )}
 

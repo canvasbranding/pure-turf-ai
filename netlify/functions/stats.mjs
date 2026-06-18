@@ -111,6 +111,7 @@ function computeDealMetrics(deals, date_from, getStageName) {
   const wonCount      = wonInRange.length;
   const lostCount     = lostInRange.length;
   const openCount     = openDeals.length;
+  const openValue     = openDeals.reduce((s, d) => s + (parseFloat(d.properties.amount) || 0), 0);
   const revenue       = wonInRange.reduce((s, d) => s + (parseFloat(d.properties.amount) || 0), 0);
 
   // Close rate: won / (won + lost) for deals CLOSED in this period (excludes open deals and Kurt/Wyatt)
@@ -223,7 +224,7 @@ function computeDealMetrics(deals, date_from, getStageName) {
     .slice(-8)
     .map(([month, count]) => ({ month, count }));
 
-  return { total: deals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads, attributedLeads, createdTrend };
+  return { total: deals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, openValue: Math.round(openValue), stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads, attributedLeads, createdTrend };
 }
 
 // In-memory result cache. Netlify reuses warm function instances, so this persists
@@ -345,7 +346,7 @@ export const handler = async (event) => {
     // Primary tile + dashboard = 2026 Sales (residential). Commercial is exposed
     // alongside so the Pipeline view can toggle to it.
     stats.pipeline = { total: s.total, sub: `deals · ${year}`, dir: '' };
-    stats.hubspot  = { total: s.total, newLeads: s.newLeads, activeLeads: s.activeLeads, revenue: s.revenue, closeRate: s.closeRate, wonCount: s.wonCount, lostCount: s.lostCount, stageBreakdown: s.stageBreakdown, repLeaderboard: s.repLeaderboard, recentDeals: s.recentDeals, leadSources: s.leadSources, taggedLeads: s.taggedLeads, attributedLeads: s.attributedLeads, createdTrend: s.createdTrend };
+    stats.hubspot  = { total: s.total, newLeads: s.newLeads, activeLeads: s.activeLeads, revenue: s.revenue, closeRate: s.closeRate, wonCount: s.wonCount, lostCount: s.lostCount, openValue: s.openValue, stageBreakdown: s.stageBreakdown, repLeaderboard: s.repLeaderboard, recentDeals: s.recentDeals, leadSources: s.leadSources, taggedLeads: s.taggedLeads, attributedLeads: s.attributedLeads, createdTrend: s.createdTrend };
     stats.hubspotCommercial = { total: c.total, newLeads: c.newLeads, activeLeads: c.activeLeads, revenue: c.revenue, closeRate: c.closeRate, wonCount: c.wonCount, lostCount: c.lostCount, stageBreakdown: c.stageBreakdown, repLeaderboard: c.repLeaderboard, recentDeals: c.recentDeals, leadSources: c.leadSources, taggedLeads: c.taggedLeads, attributedLeads: c.attributedLeads, createdTrend: c.createdTrend };
   } else { stats.errors.hubspot = hubspotResult.reason?.message; }
 
