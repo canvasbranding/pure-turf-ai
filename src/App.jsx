@@ -1016,7 +1016,7 @@ function PipelineView({ liveStats, statsLoading, dateRange, sendMessage }) {
           <>
             <div className="dv-section-label">
               By Source
-              <span className="dv-section-note">{ls.total.toLocaleString()} leads · {phonePct}% by call</span>
+              <span className="dv-section-note">{ls.capped ? '2,500 most recent' : `${ls.total.toLocaleString()} leads`} · {phonePct}% by call</span>
             </div>
             <div className="dv-funnel">
               {ls.sources.map(s => (

@@ -89,6 +89,13 @@ export function normalizeChannel(s) {
   return null;
 }
 
+// Guard against junk lead-source tags (purely-numeric codes like "8", blanks, single
+// chars) that leak in from misconfigured forms — they shouldn't show as a channel.
+function isRealTag(s) {
+  const v = (s || '').trim();
+  return v.length > 1 && !/^\d+$/.test(v);
+}
+
 // Aircall tracking-number → lead source. Pure Turf advertises a different phone number
 // per channel, so the dialed number (CONTACT.last_used_aircall_phone_number) is the
 // truest signal of where a PHONE lead came from — and ~78% of tracked calls hit a Google
@@ -113,7 +120,7 @@ export function contactSourceOf(props) {
   const num = (props.last_used_aircall_phone_number || '').trim();
   if (num && PHONE_SOURCE_MAP[num]) return { source: PHONE_SOURCE_MAP[num], basis: 'phone' };
   const manual = props.true_lead_source?.trim();
-  if (manual) return { source: normalizeChannel(manual) || manual, basis: 'manual' };
+  if (isRealTag(manual)) return { source: normalizeChannel(manual) || manual, basis: 'manual' };
   const raw = props.hs_analytics_source?.trim();
   if (raw) {
     const label = HS_SOURCE_LABELS[raw] || raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
@@ -131,7 +138,7 @@ export function contactSourceOf(props) {
 // toward Google until call tracking is in place.
 export function leadSourceOf(props) {
   const manual = props.true_lead_source?.trim();
-  if (manual) return { source: normalizeChannel(manual) || manual, auto: false };
+  if (isRealTag(manual)) return { source: normalizeChannel(manual) || manual, auto: false };
   const raw = props.hs_analytics_source?.trim();
   if (raw) {
     const label = HS_SOURCE_LABELS[raw] || raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
