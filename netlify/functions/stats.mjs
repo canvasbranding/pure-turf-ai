@@ -283,19 +283,46 @@ export const handler = async (event) => {
         return true;
       })
       .filter(r => !EXCLUDED_CAMPAIGNS.some(ex => (r.campaign||'').toLowerCase().includes(ex)));
-    const spend = rows.reduce((s, r) => s + (parseFloat(r.spend) || parseFloat(r.cost) || 0), 0);
-    const convs = rows.reduce((s, r) => s + (parseFloat(r.conversions) || 0), 0);
-    const clicks = rows.reduce((s, r) => s + (parseFloat(r.clicks) || 0), 0);
-    const impressions = rows.reduce((s, r) => s + (parseFloat(r.impressions) || 0), 0);
-    const cpa   = convs > 0 ? Math.round(spend / convs) : null;
-    const cpc   = clicks > 0 ? (spend / clicks).toFixed(2) : null;
-    const ctr   = impressions > 0 ? (clicks / impressions * 100).toFixed(2) : null;
+    // LSA (Local Services Ads) is a separate pay-per-lead channel that stays always-on
+    // even when the PPC campaigns (Search/PMax) are paused. Windsor returns it as a
+    // system-generated "LocalServices..." campaign. Split so the two channels can be
+    // reported independently (PPC ramps down into the seasonal pause; LSA keeps running).
+    const isLsa = r => (r.campaign || '').toLowerCase().includes('localservices');
 
-    // Per-campaign breakdown (aggregate by campaign name)
+    // Aggregate KPIs + daily trend for an arbitrary subset of rows.
+    const summarize = (subset) => {
+      const spend = subset.reduce((s, r) => s + (parseFloat(r.spend) || parseFloat(r.cost) || 0), 0);
+      const convs = subset.reduce((s, r) => s + (parseFloat(r.conversions) || 0), 0);
+      const clicks = subset.reduce((s, r) => s + (parseFloat(r.clicks) || 0), 0);
+      const impressions = subset.reduce((s, r) => s + (parseFloat(r.impressions) || 0), 0);
+      const dayMap = {};
+      subset.forEach(r => {
+        if (!r.date) return;
+        const day = r.date.slice(0, 10);
+        if (!dayMap[day]) dayMap[day] = { spend: 0, conversions: 0, clicks: 0 };
+        dayMap[day].spend       += parseFloat(r.spend) || parseFloat(r.cost) || 0;
+        dayMap[day].conversions += parseFloat(r.conversions) || 0;
+        dayMap[day].clicks      += parseFloat(r.clicks) || 0;
+      });
+      const trend = Object.entries(dayMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-90)
+        .map(([date, dd]) => ({ date, spend: Math.round(dd.spend), conversions: Math.round(dd.conversions), clicks: Math.round(dd.clicks) }));
+      return {
+        spend: Math.round(spend), conversions: Math.round(convs), clicks: Math.round(clicks), impressions: Math.round(impressions),
+        cpa: convs > 0 ? Math.round(spend / convs) : null,
+        cpc: clicks > 0 ? (spend / clicks).toFixed(2) : null,
+        ctr: impressions > 0 ? (clicks / impressions * 100).toFixed(2) : null,
+        trend,
+      };
+    };
+
+    // Per-campaign breakdown (aggregate by campaign name), tagged PPC vs LSA.
+    const spend = rows.reduce((s, r) => s + (parseFloat(r.spend) || parseFloat(r.cost) || 0), 0);
     const campMap = {};
     rows.forEach(r => {
       const name = r.campaign || 'Unknown';
-      if (!campMap[name]) campMap[name] = { spend: 0, conversions: 0, clicks: 0, impressions: 0 };
+      if (!campMap[name]) campMap[name] = { spend: 0, conversions: 0, clicks: 0, impressions: 0, lsa: isLsa(r) };
       campMap[name].spend       += parseFloat(r.spend) || parseFloat(r.cost) || 0;
       campMap[name].conversions += parseFloat(r.conversions) || 0;
       campMap[name].clicks      += parseFloat(r.clicks) || 0;
@@ -303,6 +330,7 @@ export const handler = async (event) => {
     });
     const campaigns = Object.entries(campMap).map(([name, d]) => ({
       name,
+      channel:     d.lsa ? 'LSA' : 'PPC',
       spend:       Math.round(d.spend),
       conversions: Math.round(d.conversions),
       clicks:      Math.round(d.clicks),
@@ -311,23 +339,16 @@ export const handler = async (event) => {
       sharePct:    spend > 0 ? Math.round(d.spend / spend * 100) : 0,
     })).sort((a, b) => b.spend - a.spend);
 
-    // Daily trend (spend + conversions) — for the Google Ads chart. Shows the ramp-down
-    // into the intentional pause.
-    const dayMap = {};
-    rows.forEach(r => {
-      if (!r.date) return;
-      const day = r.date.slice(0, 10);
-      if (!dayMap[day]) dayMap[day] = { spend: 0, conversions: 0, clicks: 0 };
-      dayMap[day].spend       += parseFloat(r.spend) || parseFloat(r.cost) || 0;
-      dayMap[day].conversions += parseFloat(r.conversions) || 0;
-      dayMap[day].clicks      += parseFloat(r.clicks) || 0;
-    });
-    const trend = Object.entries(dayMap)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-90)
-      .map(([date, dd]) => ({ date, spend: Math.round(dd.spend), conversions: Math.round(dd.conversions), clicks: Math.round(dd.clicks) }));
+    const all = summarize(rows);
+    const ppc = summarize(rows.filter(r => !isLsa(r)));
+    const lsa = summarize(rows.filter(isLsa));
 
-    stats.google = { spend: Math.round(spend), conversions: Math.round(convs), clicks: Math.round(clicks), impressions: Math.round(impressions), cpa, cpc, ctr, campaigns, trend, sub: convs > 0 ? `↑ ${Math.round(convs)} conv · $${cpa} CPA` : `$${Math.round(spend).toLocaleString()} spend`, dir: 'up' };
+    stats.google = {
+      ...all, campaigns,
+      ppc, lsa,
+      sub: all.conversions > 0 ? `↑ ${all.conversions} conv · $${all.cpa} CPA` : `$${all.spend.toLocaleString()} spend`,
+      dir: 'up',
+    };
   } else { stats.errors.google = googleResult.reason?.message; }
 
   // ── Meta Ads — DISABLED (Windsor slot reallocated to QuickBooks) ──────────

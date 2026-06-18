@@ -837,8 +837,16 @@ const GOOGLE_ADS_RESUME = '2026-07-15';
 const adsPaused = () => new Date().toISOString().slice(0, 10) < GOOGLE_ADS_RESUME;
 
 function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
-  const d = liveStats?.google;
+  const g = liveStats?.google;
   const rangeLabel = DATE_RANGES[dateRange]?.label || 'Month to date';
+  const [channel, setChannel] = useState('all'); // all | ppc | lsa
+
+  // PPC vs LSA are separate channels (LSA stays always-on through the PPC pause).
+  const hasSplit = g && g.ppc && g.lsa;
+  const d = channel === 'ppc' ? g?.ppc : channel === 'lsa' ? g?.lsa : g;
+  const camps = (g?.campaigns || []).filter(c =>
+    channel === 'all' ? true : channel === 'lsa' ? c.channel === 'LSA' : c.channel !== 'LSA');
+  const chanLabel = channel === 'ppc' ? 'PPC' : channel === 'lsa' ? 'LSA' : 'all Google Ads';
 
   const fmt$ = v => v >= 1000 ? `$${(v/1000).toFixed(1)}k` : `$${v}`;
   const fmtN = v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v);
@@ -856,7 +864,17 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
       {adsPaused() && (
         <div className="ads-notice">
           <span className="ads-notice-icon" aria-hidden="true">⏸</span>
-          <span><strong>Campaigns intentionally paused</strong> — ramping back up <strong>July 15</strong> for Aeration season. Low spend &amp; conversions through then are by design, not neglect.</span>
+          <span><strong>PPC campaigns intentionally paused</strong> — ramping back up <strong>July 15</strong> for Aeration season. LSA (Local Services) stays always-on, so the trickle of spend you see now is LSA, by design.</span>
+        </div>
+      )}
+
+      {hasSplit && (
+        <div className="pipe-toggle" style={{marginBottom:14}}>
+          {[['all','All'],['ppc','PPC'],['lsa','LSA']].map(([k,l]) => (
+            <button key={k} className={`pipe-toggle-btn${channel === k ? ' active' : ''}`} onClick={() => setChannel(k)}>
+              {l}{k !== 'all' && g?.[k]?.spend != null ? <span style={{opacity:0.6,fontWeight:500}}> · {fmt$(g[k].spend)}</span> : null}
+            </button>
+          ))}
         </div>
       )}
 
@@ -883,7 +901,7 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
       {d?.trend?.length > 1 && (
         <>
           <div className="dv-section-label" style={{marginTop:6}}>
-            Spend &amp; Conversions
+            Spend &amp; Conversions{channel !== 'all' ? ` · ${chanLabel}` : ''}
             <span className="dv-section-note" style={{opacity:1}}><span style={{color:'var(--accent,#5E6AD2)'}}>● Spend</span>&nbsp;&nbsp;<span style={{color:'#10B981'}}>┄ Conversions</span></span>
           </div>
           <TrendChart
@@ -899,7 +917,7 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
       <div className="dv-section-label">By Campaign</div>
       {statsLoading ? (
         <div className="dv-loading-rows">{[1,2,3].map(i => <div key={i} className="dv-row-skel"/>)}</div>
-      ) : d?.campaigns?.length > 0 ? (
+      ) : camps.length > 0 ? (
         <div className="dv-table">
           <div className="dv-table-hdr">
             <div className="dv-col-main">Campaign</div>
@@ -908,10 +926,10 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
             <div className="dv-col-num">CPA</div>
             <div className="dv-col-num">Share</div>
           </div>
-          {d.campaigns.map(camp => (
+          {camps.map(camp => (
             <div key={camp.name} className="dv-table-row" onClick={() => sendMessage(`Break down the "${camp.name}" Google Ads campaign — what's the performance and what should we change?`)}>
               <div className="dv-col-main">
-                <div className="dv-camp-name">{camp.name}</div>
+                <div className="dv-camp-name">{camp.channel === 'LSA' ? 'Local Services Ads' : camp.name}{camp.channel === 'LSA' && <span className="dv-camp-tag">LSA</span>}</div>
                 <div className="dv-camp-bar-wrap"><div className="dv-camp-bar" style={{width:`${camp.sharePct}%`}}/></div>
               </div>
               <div className="dv-col-num">{fmt$(camp.spend)}</div>
@@ -922,10 +940,10 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
           ))}
         </div>
       ) : (
-        <div className="dv-empty">{d ? 'No campaign data for this period' : liveStats?.errors?.google ? '⚠ Google Ads data couldn’t be loaded right now' : 'Loading…'}</div>
+        <div className="dv-empty">{g ? 'No campaign data for this period' : liveStats?.errors?.google ? '⚠ Google Ads data couldn’t be loaded right now' : 'Loading…'}</div>
       )}
 
-      <button className="dv-ai-btn" onClick={() => sendMessage(`Give me a full Google Ads analysis for ${rangeLabel} — spend, CPA by campaign, what's over-performing, what needs attention.`)}>
+      <button className="dv-ai-btn" onClick={() => sendMessage(`Give me a full Google Ads analysis for ${rangeLabel} (${chanLabel}) — spend, CPA by campaign, what's over-performing, what needs attention.`)}>
         <span>Ask AI for full analysis</span>
         <Icon name="arrowR" size={13}/>
       </button>
