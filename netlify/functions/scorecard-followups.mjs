@@ -6,8 +6,13 @@
 import { PIPELINE_2026_SALES, ACTIVE_PIPELINES, OWNER_NAMES, NON_SALES_STAFF, DEAL_STAGE_NAMES, fetchDealsInPipelines } from './_shared/crm.mjs';
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
-const STALE_DAYS = 7;      // an open deal with no activity in this many days needs follow-up
-const STALE_EST_DAYS = 10; // an estimate-stage deal cold this long is a stalled estimate
+// Tunables. The actionable "chase" list = open deals old enough to be overdue (>= MIN_AGE)
+// but not ancient (<= ANCIENT), that have had no deal-level touch in FOLLOWUP_STALE days.
+// Deals older than ANCIENT are a separate "review / close-out" pile (this absorbs the March
+// bulk-import cohort and genuinely-dead estimates) — surfaced honestly, not as "neglect."
+const FOLLOWUP_STALE_DAYS = 21; // no logged touch in this many days → needs a nudge
+const MIN_AGE_DAYS = 10;        // brand-new deals aren't "overdue" yet
+const ANCIENT_DAYS = 75;        // older than this → review/close pile, not the active chase list
 
 async function fetchStageMap() {
   try {
@@ -51,35 +56,36 @@ export default async (req) => {
       if (!owner || NON_SALES_STAFF.has(owner) || !OWNER_NAMES[owner]) continue;
 
       const lastTouch = Math.max(ms(p.notes_last_contacted), ms(p.hs_last_sales_activity_timestamp));
-      const created = ms(p.createdate);
-      const ageDays = daysAgo(created);                        // how old the deal is
-      const ds = lastTouch ? daysAgo(lastTouch) : null;        // days since last touch (null = never)
-      // Cold = no touch in N days, AND the deal is old enough to expect one.
-      const sinceRef = lastTouch ? daysAgo(lastTouch) : ageDays;
-      const cold = sinceRef != null && sinceRef >= STALE_DAYS;
+      const ageDays = daysAgo(ms(p.createdate));               // how old the deal is
+      const ds = lastTouch ? daysAgo(lastTouch) : null;        // days since last logged touch (null = never)
+      const sinceTouch = lastTouch ? daysAgo(lastTouch) : ageDays; // never touched → fall back to age
       const isEstimate = stage.toLowerCase().includes('estimate');
-      const estCold = isEstimate && sinceRef != null && sinceRef >= STALE_EST_DAYS;
 
-      const R = reps[owner] || (reps[owner] = { name: OWNER_NAMES[owner], open: 0, needsFollowUp: 0, staleEstimates: 0, deals: [] });
+      const R = reps[owner] || (reps[owner] = { name: OWNER_NAMES[owner], open: 0, chaseable: 0, needsFollowUp: 0, staleOld: 0, deals: [] });
       R.open++;
-      if (cold) {
-        R.needsFollowUp++;
-        R.deals.push({ name: p.dealname || 'Unnamed deal', amount: Math.round(parseFloat(p.amount) || 0), stage, daysSince: ds, ageDays, isEstimate });
+      if (ageDays != null && ageDays > ANCIENT_DAYS) {
+        R.staleOld++;                                          // ancient/dead — review or close-lost (not active follow-up)
+      } else if (ageDays != null && ageDays >= MIN_AGE_DAYS) {
+        R.chaseable++;                                         // in the active window
+        if (sinceTouch != null && sinceTouch >= FOLLOWUP_STALE_DAYS) {
+          R.needsFollowUp++;
+          R.deals.push({ name: p.dealname || 'Unnamed deal', amount: Math.round(parseFloat(p.amount) || 0), stage, daysSince: ds, ageDays, isEstimate });
+        }
       }
-      if (estCold) R.staleEstimates++;
     }
 
-    // Per rep: rank cold deals (biggest $ first), cap, and compute a follow-up rate.
+    // Per rep: rank the chase list (biggest $ first), cap, and compute a follow-up rate
+    // over the ACTIVE window only (not the ancient pile).
     const byName = {};
     for (const R of Object.values(reps)) {
       R.deals.sort((a, b) => b.amount - a.amount);
       R.topDeals = R.deals.slice(0, 8);
-      R.followUpRate = R.open > 0 ? Math.round(((R.open - R.needsFollowUp) / R.open) * 100) : null;
+      R.followUpRate = R.chaseable > 0 ? Math.round(((R.chaseable - R.needsFollowUp) / R.chaseable) * 100) : null;
       delete R.deals;
       byName[R.name] = R;
     }
 
-    return new Response(JSON.stringify({ reps: byName, staleDays: STALE_DAYS, staleEstDays: STALE_EST_DAYS, fetchedAt: new Date().toISOString() }), {
+    return new Response(JSON.stringify({ reps: byName, followupStaleDays: FOLLOWUP_STALE_DAYS, ancientDays: ANCIENT_DAYS, fetchedAt: new Date().toISOString() }), {
       status: 200,
       headers: { ...CORS, 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=300, stale-while-revalidate=900' },
     });

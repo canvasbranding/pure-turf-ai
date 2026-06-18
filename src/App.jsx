@@ -2068,11 +2068,11 @@ function RepScorecardBody({ repRow, repEmail, repName, repGoals, rangeLabel, loa
       {followupsLoaded && repRow && (
         <>
           <div className="sc-section-row" style={{marginTop:18}}>
-            <div className="dv-section-label" style={{margin:0}}>Needs Follow-Up {repRow.needsFollowUp > 0 && <span className="sc-fu-count">{repRow.needsFollowUp}</span>}</div>
-            {repRow.followUpRate != null && <span className="sc-fu-rate">{repRow.followUpRate}% of open deals current</span>}
+            <div className="dv-section-label" style={{margin:0}}>Aging — Chase These {repRow.needsFollowUp > 0 && <span className="sc-fu-count">{repRow.needsFollowUp}</span>}</div>
+            {repRow.followUpRate != null && <span className="sc-fu-rate">{repRow.followUpRate}% of active deals current</span>}
           </div>
           {repRow.topDeals.length === 0 ? (
-            <div className="sc-empty">No overdue follow-ups. Every open deal has recent activity.</div>
+            <div className="sc-empty">No overdue follow-ups in the active window. Nice work.</div>
           ) : (
             <div className="sc-fu-list">
               {repRow.topDeals.map((d, i) => (
@@ -2086,6 +2086,9 @@ function RepScorecardBody({ repRow, repEmail, repName, repGoals, rangeLabel, loa
               ))}
             </div>
           )}
+          {repRow.staleOld > 0 && (
+            <div className="sc-stale-note">Plus <strong>{repRow.staleOld}</strong> older estimates (75+ days) to review or close out — pipeline cleanup, not active follow-up.</div>
+          )}
         </>
       )}
 
@@ -2093,7 +2096,7 @@ function RepScorecardBody({ repRow, repEmail, repName, repGoals, rangeLabel, loa
       <ScCoach role="rep" name={first} period={rangeLabel} context={{
         metrics: repRow ? { revenue: repRow.revenue, newCustomers: repRow.won, leads: repRow.leads, closeRate: repRow.closeRate, calls: repRow.calls, programs: repRow.programsTotal, avgDeal: repRow.won ? Math.round(repRow.revenue / repRow.won) : null } : {},
         goals: goals.map(g => { const p = scorecardPacing(g.metric_key, g, actualOf(g)); return { metric: SC_METRICS[g.metric_key]?.label, target: g.target_value, current: actualOf(g), status: p?.statusLabel, percentToGoal: p?.percentToGoal, projectedFinish: p?.projectedFinish, gap: p?.gap, daysLeft: p?.daysLeft }; }),
-        followUp: repRow ? { needsFollowUp: repRow.needsFollowUp, staleEstimates: repRow.staleEstimates, followUpRate: repRow.followUpRate, coldDeals: (repRow.topDeals || []).map(d => ({ name: d.name, amount: d.amount, daysCold: d.daysSince, stage: d.stage })) } : {},
+        followUp: repRow ? { needsFollowUp: repRow.needsFollowUp, staleOld: repRow.staleOld, followUpRate: repRow.followUpRate, coldDeals: (repRow.topDeals || []).map(d => ({ name: d.name, amount: d.amount, daysCold: d.daysSince, stage: d.stage })) } : {},
       }}/>
       <div style={{height:32}}/>
     </>
@@ -2164,7 +2167,8 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
       programsTotal: progByName[r.name]?.total || 0,
       followUpRate: fu.followUpRate ?? null,
       needsFollowUp: fu.needsFollowUp ?? 0,
-      staleEstimates: fu.staleEstimates ?? 0,
+      chaseable: fu.chaseable ?? 0,
+      staleOld: fu.staleOld ?? 0,
       openDeals: fu.open ?? 0,
       topDeals: fu.topDeals || [],
       perWin: won > 0 ? Math.round((calls + emails) / won) : null,
@@ -2329,7 +2333,7 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
 
       <div className="dv-section-label" style={{margin:'18px 0 8px'}}>Team Coaching</div>
       <ScCoach role="manager" name="team" period={rangeLabel} context={{
-        reps: rows.map(r => ({ name: r.name, revenue: r.revenue, won: r.won, leads: r.leads, closeRate: r.closeRate, calls: r.calls, needsFollowUp: r.needsFollowUp, staleEstimates: r.staleEstimates, followUpRate: r.followUpRate, topColdDeal: r.topDeals?.[0] ? { name: r.topDeals[0].name, amount: r.topDeals[0].amount, daysCold: r.topDeals[0].daysSince } : null })),
+        reps: rows.map(r => ({ name: r.name, revenue: r.revenue, won: r.won, leads: r.leads, closeRate: r.closeRate, calls: r.calls, needsFollowUp: r.needsFollowUp, staleOld: r.staleOld, followUpRate: r.followUpRate, topColdDeal: r.topDeals?.[0] ? { name: r.topDeals[0].name, amount: r.topDeals[0].amount, daysCold: r.topDeals[0].daysSince } : null })),
         goals: goals.map(g => ({ rep: g.rep_name, metric: SC_METRICS[g.metric_key]?.label, target: g.target_value })),
       }}/>
       <div style={{height:32}}/>
