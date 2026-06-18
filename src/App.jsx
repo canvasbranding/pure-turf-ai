@@ -76,14 +76,14 @@ const SALES_GOALS_EMAILS   = ['dturner@pureturfllc.com', 'dhamby@pureturfllc.com
 
 const DEFAULT_PERMISSIONS = {
   // finance: hidden for now (QuickBooks integration stays built — flip these to true to restore).
-  admin:        { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: true,  salesGoals: true,  manageUsers: true  },
-  owner:        { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, manageUsers: false },
-  marketing:    { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, manageUsers: false },
-  executive:    { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: false, goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, manageUsers: false },
-  sales_manager:{ googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: true,  goalAdmin: false, teamGoals: true,  financeGoals: false, salesGoals: false, manageUsers: false },
-  sales:        { googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: false, goalAdmin: false, teamGoals: false, financeGoals: false, salesGoals: false, manageUsers: false },
+  admin:        { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: true,  salesGoals: true,  scorecard: true, scorecardTeam: true,  manageUsers: true  },
+  owner:        { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  manageUsers: false },
+  marketing:    { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  manageUsers: false },
+  executive:    { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: false, goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  manageUsers: false },
+  sales_manager:{ googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: true,  goalAdmin: false, teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  manageUsers: false },
+  sales:        { googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: false, goalAdmin: false, teamGoals: false, financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: false, manageUsers: false },
 };
-const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', finance:'Finance', mondayBrief:'Mon. Brief', adminPanel:'Admin Panel', goalAdmin:'Goal Admin', teamGoals:'Team Goals', financeGoals:'Finance Goals', salesGoals:'Sales Goals', manageUsers:'Manage Users' };
+const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', finance:'Finance', mondayBrief:'Mon. Brief', adminPanel:'Admin Panel', goalAdmin:'Goal Admin', teamGoals:'Team Goals', financeGoals:'Finance Goals', salesGoals:'Sales Goals', scorecard:'Scorecard', scorecardTeam:'Team Scorecard', manageUsers:'Manage Users' };
 const ROLE_LABELS = { admin:'Admin', owner:'Owner', marketing:'Marketing', executive:'Executive', sales_manager:'Sales Mgr', sales:'Sales' };
 
 // Friendly names for data sources — used by the data-health banner and tile error states
@@ -234,6 +234,65 @@ function goalProgress(metric, target, actual) {
   let status = 'good';
   if (!paced) status = actual >= expected * 0.9 ? 'warn' : 'bad';
   return { pct: Math.max(0, pct), expected, paced, status, yearFraction };
+}
+
+// ── Scorecard goals: metric mapping + pacing engine ──────────────────────────
+// SC_METRICS is the configurable mapping layer — connects a goal's metric_key to the
+// rep's actual value from data the scorecard already loads (repLeaderboard + programs +
+// activity). Add a metric by adding an entry here (Phase 2 adds speed-to-lead, follow-up
+// gaps, quotes-sent, add-ons, etc. once those HubSpot queries exist).
+const SC_METRICS = {
+  revenue:   { label: 'Closed Revenue', unit: 'dollars',    format: 'currency', cadence: 'cumulative', get: r => r.revenue },
+  won:       { label: 'New Customers',  unit: 'count',      format: 'number',   cadence: 'cumulative', get: r => r.won },
+  leads:     { label: 'New Leads',      unit: 'count',      format: 'number',   cadence: 'cumulative', get: r => r.leads },
+  closeRate: { label: 'Close Rate',     unit: 'percentage', format: 'percent',  cadence: 'rate',       get: r => r.closeRate },
+  calls:     { label: 'Calls Made',     unit: 'count',      format: 'number',   cadence: 'cumulative', get: r => r.calls },
+  emails:    { label: 'Emails Sent',    unit: 'count',      format: 'number',   cadence: 'cumulative', get: r => r.emails },
+  avgDeal:   { label: 'Avg Deal Value', unit: 'dollars',    format: 'currency', cadence: 'rate',       get: r => (r.won > 0 ? Math.round(r.revenue / r.won) : null) },
+  programs:  { label: 'Programs Sold',  unit: 'count',      format: 'number',   cadence: 'cumulative', get: r => r.programsTotal },
+};
+
+// Pacing status thresholds (ratio of actual to expected-by-today). Configurable.
+const PACE_BANDS = [
+  { id: 'ahead',           label: 'Ahead',           min: 1.10 },
+  { id: 'on_track',        label: 'On Track',        min: 0.95 },
+  { id: 'slightly_behind', label: 'Slightly Behind', min: 0.80 },
+  { id: 'at_risk',         label: 'At Risk',         min: 0.60 },
+  { id: 'off_track',       label: 'Off Track',       min: -Infinity },
+];
+const PACE_COLOR = { ahead: 'good', on_track: 'good', slightly_behind: 'warn', at_risk: 'bad', off_track: 'bad' };
+
+// Full pacing for one scorecard goal given the rep's current actual value.
+function scorecardPacing(metricKey, goal, actual) {
+  const meta = SC_METRICS[metricKey];
+  if (!meta || actual == null || !goal?.target_value) return null;
+  const target = Number(goal.target_value);
+  const start = new Date(goal.start_date + 'T00:00:00');
+  const end = new Date(goal.end_date + 'T23:59:59');
+  const now = new Date();
+  const totalMs = Math.max(1, end - start);
+  const timeElapsed = Math.min(1, Math.max(0, (now - start) / totalMs));
+  const daysLeft = Math.max(0, Math.ceil((end - now) / 864e5));
+  const isRate = meta.cadence === 'rate';
+  const expected = isRate ? target : target * timeElapsed;
+  const percentToGoal = target ? Math.round((actual / target) * 100) : 0;
+  const gap = Math.round(actual - expected);
+  const projectedFinish = isRate ? actual : (timeElapsed > 0.02 ? Math.round(actual / timeElapsed) : null);
+  const ratio = expected > 0 ? actual / expected : (actual >= target ? 1.2 : 0);
+  const band = PACE_BANDS.find(b => ratio >= b.min) || PACE_BANDS[PACE_BANDS.length - 1];
+  return {
+    target, actual, expected: Math.round(expected), percentToGoal: Math.max(0, percentToGoal),
+    gap, projectedFinish, timeElapsedPct: Math.round(timeElapsed * 100), daysLeft,
+    status: band.id, statusLabel: band.label, tone: PACE_COLOR[band.id],
+  };
+}
+
+// Format a value per a metric's unit (shared by goal cards).
+function fmtMetric(format, v) {
+  if (v == null) return '–';
+  if (format === 'currency') { const n = v < 0, a = Math.abs(v); return (n ? '-' : '') + (a >= 1000 ? `$${Math.round(a / 1000).toLocaleString()}k` : `$${Math.round(a)}`); }
+  if (format === 'percent') return `${Math.round(v)}%`;
+  return Math.round(v).toLocaleString();
 }
 
 function loadGoalTargets() {
@@ -1787,9 +1846,123 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
 // ── SCORECARD ──────────────────────────────────────────────────────────
 // Effort (calls/emails from HubSpot) next to outcome (leads/won/close%/revenue from
 // the pipeline data). Activity loads from its own function only when this view opens.
-function ScorecardView({ liveStats, dateRange, sendMessage }) {
+// Sales reps the scorecard knows about (email ↔ HubSpot owner name). Used to attach
+// goals (keyed by email) to leaderboard rows (keyed by name).
+const REP_DIRECTORY = [
+  { email: 'kaley@pureturfllc.com',  name: 'Kaley Brownlee' },
+  { email: 'chris@pureturfllc.com',  name: 'Chris Kleeman' },
+  { email: 'daniel@pureturfllc.com', name: 'Daniel Anderson' },
+  { email: 'wyatt@pureturfllc.com',  name: 'Wyatt Raines' },
+];
+function periodDates(periodType) {
+  const t = new Date(), y = t.getFullYear(), m = t.getMonth();
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  if (periodType === 'weekly') { const day=(t.getDay()+6)%7; const s=new Date(t); s.setDate(t.getDate()-day); const e=new Date(s); e.setDate(s.getDate()+6); return { start_date:iso(s), end_date:iso(e) }; }
+  if (periodType === 'quarterly') { const q=Math.floor(m/3); return { start_date:iso(new Date(y,q*3,1)), end_date:iso(new Date(y,q*3+3,0)) }; }
+  if (periodType === 'seasonal') { return { start_date:iso(new Date(y,m,1)), end_date:iso(new Date(y,m+3,0)) }; }
+  return { start_date:iso(new Date(y,m,1)), end_date:iso(new Date(y,m+1,0)) }; // monthly
+}
+
+// One scorecard goal rendered with full pacing.
+function ScGoalCard({ goal, actual, canEdit, onEdit }) {
+  const meta = SC_METRICS[goal.metric_key] || { label: goal.metric_key, format: 'number', cadence: 'cumulative' };
+  const p = scorecardPacing(goal.metric_key, goal, actual);
+  return (
+    <div className={`sc-goal-card${p ? ' gc-' + p.tone : ''}`}>
+      <div className="sc-goal-top">
+        <div>
+          <div className="sc-goal-title">{goal.title || meta.label}</div>
+          <div className="sc-goal-sub">{meta.label} · {goal.period_type}</div>
+        </div>
+        {canEdit && <button className="sc-goal-edit" onClick={() => onEdit(goal)} aria-label="Edit goal">✎</button>}
+      </div>
+      <div className="sc-goal-val">{fmtMetric(meta.format, actual)}<span className="sc-goal-target"> / {fmtMetric(meta.format, goal.target_value)}</span></div>
+      <div className="goal-bar-wrap">
+        <div className={`goal-bar${p ? ' gb-' + p.tone : ''}`} style={{ width: `${Math.min(100, p?.percentToGoal || 0)}%` }}/>
+        {p && meta.cadence === 'cumulative' && <div className="goal-pace-mark" style={{ left: `${Math.min(100, Math.round((p.expected / goal.target_value) * 100))}%` }} title="expected by today"/>}
+      </div>
+      {p ? (
+        <>
+          <div className="sc-goal-stats">
+            <span className="sc-goal-pct">{p.percentToGoal}% to goal</span>
+            <span className={`goal-card-status gs-${p.tone}`}>{p.statusLabel}</span>
+          </div>
+          <div className="sc-goal-detail">
+            <span>Expected {fmtMetric(meta.format, p.expected)}</span>
+            <span className={p.gap >= 0 ? 'gs-good' : 'gs-bad'}>Gap {p.gap >= 0 ? '+' : ''}{fmtMetric(meta.format, p.gap)}</span>
+            {p.projectedFinish != null && <span>Proj. {fmtMetric(meta.format, p.projectedFinish)}</span>}
+            <span>{p.daysLeft}d left</span>
+          </div>
+        </>
+      ) : <div className="sc-goal-stats"><span className="goal-card-status gs-none">no data yet</span></div>}
+    </div>
+  );
+}
+
+// Create / edit a goal — practical, not an academic SMART worksheet.
+function ScGoalForm({ initial, reps, currentUser, isManager, onSave, onClose, busy }) {
+  const [f, setF] = React.useState(initial || { rep_email: currentUser.email, metric_key: 'revenue', title: '', target_value: '', period_type: 'monthly', notes: '' });
+  const meta = SC_METRICS[f.metric_key];
+  const up = (k, v) => setF(p => ({ ...p, [k]: v }));
+  const submit = () => {
+    const dates = f.period_type === 'custom' ? { start_date: f.start_date, end_date: f.end_date } : periodDates(f.period_type);
+    const repName = (reps.find(r => r.email === f.rep_email) || {}).name;
+    onSave({ ...f, ...dates, rep_name: repName, target_value: Number(f.target_value) });
+  };
+  return (
+    <div className="sc-modal-overlay" onClick={onClose}>
+      <div className="sc-modal" onClick={e => e.stopPropagation()}>
+        <div className="sc-modal-title">{f.id ? 'Edit goal' : 'New sales goal'}</div>
+        <label className="sc-field"><span>What are we improving?</span>
+          <select value={f.metric_key} onChange={e => up('metric_key', e.target.value)}>
+            {Object.entries(SC_METRICS).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+          </select>
+        </label>
+        {isManager && (
+          <label className="sc-field"><span>Whose goal?</span>
+            <select value={f.rep_email} onChange={e => up('rep_email', e.target.value)}>
+              {reps.map(r => <option key={r.email} value={r.email}>{r.name}</option>)}
+            </select>
+          </label>
+        )}
+        <label className="sc-field"><span>Target ({meta?.unit})</span>
+          <input type="number" value={f.target_value} onChange={e => up('target_value', e.target.value)} placeholder="e.g. 85000"/>
+        </label>
+        <label className="sc-field"><span>By when?</span>
+          <select value={f.period_type} onChange={e => up('period_type', e.target.value)}>
+            <option value="weekly">This week</option>
+            <option value="monthly">This month</option>
+            <option value="quarterly">This quarter</option>
+            <option value="seasonal">This season (3 mo)</option>
+            <option value="custom">Custom dates</option>
+          </select>
+        </label>
+        {f.period_type === 'custom' && (
+          <div className="sc-field-row">
+            <label className="sc-field"><span>Start</span><input type="date" value={f.start_date || ''} onChange={e => up('start_date', e.target.value)}/></label>
+            <label className="sc-field"><span>End</span><input type="date" value={f.end_date || ''} onChange={e => up('end_date', e.target.value)}/></label>
+          </div>
+        )}
+        <label className="sc-field"><span>Why does it matter? (optional)</span>
+          <input value={f.notes || ''} onChange={e => up('notes', e.target.value)} placeholder="Context for this goal"/>
+        </label>
+        <div className="sc-modal-actions">
+          <button className="sc-btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="sc-btn-primary" disabled={busy || !f.target_value} onClick={submit}>{busy ? 'Saving…' : 'Save goal'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }) {
   const [activity, setActivity] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
+  const [goals, setGoals] = React.useState([]);
+  const [form, setForm] = React.useState(null);   // goal being created/edited
+  const [saving, setSaving] = React.useState(false);
+  const isManager = !!perms?.scorecardTeam;
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -1799,11 +1972,29 @@ function ScorecardView({ liveStats, dateRange, sendMessage }) {
     return () => { cancelled = true; };
   }, [dateRange]);
 
+  const loadGoals = React.useCallback(() => {
+    if (!currentUser?.email) return;
+    fetch('/.netlify/functions/scorecard-goals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'list', requester_email: currentUser.email }) })
+      .then(r => r.json()).then(d => { if (d.ok) setGoals(d.goals || []); }).catch(() => {});
+  }, [currentUser]);
+  React.useEffect(() => { loadGoals(); }, [loadGoals]);
+
+  const saveGoal = async (goal) => {
+    setSaving(true);
+    try {
+      const res = await fetch('/.netlify/functions/scorecard-goals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'upsert', goal, requester_email: currentUser.email }) });
+      const d = await res.json();
+      if (d.ok) { setForm(null); loadGoals(); } else window.alert(d.error || 'Could not save goal');
+    } finally { setSaving(false); }
+  };
+
   const rangeLabel = DATE_RANGES[dateRange]?.label || 'Month to date';
   const fmt$ = v => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v||0}`;
   const board = (liveStats?.hubspot?.repLeaderboard || []).filter(r => r.name !== 'Unassigned');
   const actByName = {};
   (activity?.reps || []).forEach(r => { actByName[r.name] = r; });
+  const progByName = {};
+  (liveStats?.rgServices?.programsByRep || []).forEach(x => { progByName[x.rep] = x; });
   const emailsOff = (activity?.unavailable || []).includes('emails');
   const callsOff  = (activity?.unavailable || []).includes('calls');
 
@@ -1816,20 +2007,80 @@ function ScorecardView({ liveStats, dateRange, sendMessage }) {
       calls, emails, activity: calls + emails,
       leads: r.leads || 0, won, closeRate: r.closeRate,
       revenue: r.revenue || 0,
-      // Effort efficiency: wins per 100 outreach touches.
+      programsTotal: progByName[r.name]?.total || 0,
       perWin: won > 0 ? Math.round((calls + emails) / won) : null,
     };
   }).sort((a, b) => b.activity - a.activity);
   const maxAct = Math.max(...rows.map(r => r.activity), 1);
 
+  // Goals grouped by rep email; helper to compute a goal's current actual.
+  const goalsByRep = {};
+  goals.forEach(g => { (goalsByRep[(g.rep_email || '').toLowerCase()] = goalsByRep[(g.rep_email || '').toLowerCase()] || []).push(g); });
+  const rowForEmail = email => { const d = REP_DIRECTORY.find(r => r.email === email); return d ? rows.find(x => x.name === d.name) : null; };
+  const actualFor = (goal, row) => { const m = SC_METRICS[goal.metric_key]; return (m && row) ? m.get(row) : null; };
+
+  // ── REP VIEW: "My Sales Scorecard" ───────────────────────────────────────
+  if (!isManager) {
+    const myEmail = (currentUser?.email || '').toLowerCase();
+    const myRow = rows.find(r => currentUser?.name && r.name.toLowerCase().includes(currentUser.name.split(' ')[0].toLowerCase())) || rowForEmail(myEmail);
+    const myGoals = (goalsByRep[myEmail] || []).filter(g => g.status === 'active' || !g.status);
+    const headline = myGoals.map(g => ({ g, p: scorecardPacing(g.metric_key, g, actualFor(g, myRow)) })).find(x => x.p);
+    const SNAP = [
+      { k: 'revenue', label: 'Revenue', v: myRow ? fmt$(myRow.revenue) : '–' },
+      { k: 'won', label: 'New Customers', v: myRow?.won ?? '–' },
+      { k: 'leads', label: 'Leads', v: myRow?.leads ?? '–' },
+      { k: 'closeRate', label: 'Close Rate', v: myRow?.closeRate != null ? `${myRow.closeRate}%` : '–' },
+      { k: 'calls', label: 'Calls', v: myRow ? myRow.calls : '–' },
+      { k: 'programs', label: 'Programs', v: myRow?.programsTotal ?? '–' },
+    ];
+    return (
+      <div className="data-view-scroll">
+        {form && <ScGoalForm initial={form} reps={[{ email: myEmail, name: currentUser?.name }]} currentUser={currentUser} isManager={false} onSave={saveGoal} onClose={() => setForm(null)} busy={saving}/>}
+        <div className="dv-header">
+          <div><div className="dv-eyebrow">My Sales Scorecard · {rangeLabel}</div><h2 className="dv-title">{currentUser?.name?.split(' ')[0]}'s Scorecard</h2></div>
+        </div>
+
+        {headline && (
+          <div className={`sc-summary gc-${headline.p.tone}`}>
+            <div className="sc-summary-lbl">{headline.g.title || SC_METRICS[headline.g.metric_key]?.label} · pacing</div>
+            <div className="sc-summary-main"><span className={`goal-card-status gs-${headline.p.tone}`}>{headline.p.statusLabel}</span> · {headline.p.percentToGoal}% to goal</div>
+            <div className="sc-summary-sub">Projected {fmtMetric(SC_METRICS[headline.g.metric_key]?.format, headline.p.projectedFinish)} · gap {headline.p.gap >= 0 ? '+' : ''}{fmtMetric(SC_METRICS[headline.g.metric_key]?.format, headline.p.gap)} · {headline.p.daysLeft} days left</div>
+          </div>
+        )}
+
+        <div className="sc-section-row">
+          <div className="dv-section-label" style={{margin:0}}>My Goals</div>
+          <button className="sc-add-btn" onClick={() => setForm({ rep_email: myEmail })}>+ Set a goal</button>
+        </div>
+        {myGoals.length === 0 ? (
+          <div className="sc-empty">No goal set yet. <button className="sc-link" onClick={() => setForm({ rep_email: myEmail })}>Create a monthly revenue goal</button> to start tracking your pace.</div>
+        ) : (
+          <div className="sc-goal-grid">
+            {myGoals.map(g => <ScGoalCard key={g.id} goal={g} actual={actualFor(g, myRow)} canEdit onEdit={() => setForm(g)}/>)}
+          </div>
+        )}
+
+        <div className="dv-section-label" style={{margin:'18px 0 8px'}}>This Period</div>
+        <div className="sc-snap-grid">
+          {SNAP.map(s => <div key={s.k} className="sc-snap"><div className="sc-snap-lbl">{s.label}</div><div className="sc-snap-val">{loading && (s.k==='calls') ? '…' : s.v}</div></div>)}
+        </div>
+
+        <button className="dv-ai-btn" style={{marginTop:16}} onClick={() => sendMessage(`Coach me on my sales scorecard for ${rangeLabel}. I have ${myRow?.leads||0} leads, ${myRow?.won||0} won, ${myRow?.closeRate??'–'}% close rate, ${myRow ? fmt$(myRow.revenue) : '$0'} revenue, ${myRow?.calls||0} calls. ${myGoals.length ? `My goals: ${myGoals.map(g=>`${SC_METRICS[g.metric_key]?.label} target ${g.target_value}`).join(', ')}.` : ''} Give me: my status, biggest risk, best opportunity, and my top 3 actions today.`)}>
+          <span>What should I do today?</span>
+          <Icon name="arrowR" size={13}/>
+        </button>
+        <div style={{height:32}}/>
+      </div>
+    );
+  }
+
+  // ── MANAGER / LEADERSHIP VIEW: "Team Sales Performance" ───────────────────
   return (
     <div className="data-view-scroll">
+      {form && <ScGoalForm initial={form} reps={REP_DIRECTORY} currentUser={currentUser} isManager onSave={saveGoal} onClose={() => setForm(null)} busy={saving}/>}
       <div className="dv-header">
-        <div>
-          <div className="dv-eyebrow">Rep Scorecard · 2026 Sales</div>
-          <h2 className="dv-title">Scorecard</h2>
-        </div>
-        <div className="dv-period">{rangeLabel}</div>
+        <div><div className="dv-eyebrow">Team Sales Performance · {rangeLabel}</div><h2 className="dv-title">Team Scorecard</h2></div>
+        <button className="sc-add-btn" onClick={() => setForm({})}>+ Set a goal</button>
       </div>
 
       {(emailsOff || callsOff) && (
@@ -1840,6 +2091,19 @@ function ScorecardView({ liveStats, dateRange, sendMessage }) {
         </div>
       )}
 
+      {/* Rep goal pacing — who's ahead / behind */}
+      {goals.length > 0 && (
+        <>
+          <div className="dv-section-label" style={{margin:'0 0 8px'}}>Goals &amp; Pacing</div>
+          <div className="sc-goal-grid">
+            {goals.filter(g => g.status === 'active' || !g.status).map(g => (
+              <ScGoalCard key={g.id} goal={g} actual={actualFor(g, rowForEmail((g.rep_email||'').toLowerCase()))} canEdit onEdit={() => setForm(g)}/>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="dv-section-label" style={{margin:'18px 0 8px'}}>Rep Comparison</div>
       <div className="dv-table sc-rep-table">
         <div className="dv-table-hdr">
           <div className="dv-col-main">Rep</div>
@@ -2912,7 +3176,7 @@ function AppInner() {
                 ...(perms.gbp      ? [{ key:'gbp',   icon:'gbp',      label:'GBP'        }] : []),
                 ...(perms.pipeline ? [{ key:'pipe',  icon:'pipeline', label:'Pipeline'   }] : []),
                 ...(perms.finance ? [{ key:'finance', icon:'finance', label:'Finance' }] : []),
-                ...(perms.teamGoals ? [{ key:'score', icon:'briefing', label:'Scorecard' }] : []),
+                ...(perms.scorecard ? [{ key:'score', icon:'briefing', label:'Scorecard' }] : []),
                 ...(perms.teamGoals ? [{ key:'search', icon:'chart', label:'Search & Visibility' }] : []),
               ].map(item => (
                 <button key={item.key}
@@ -3086,7 +3350,7 @@ function AppInner() {
 
                 {/* SCORECARD VIEW */}
                 <div className="goals-col" style={{display: mainView === 'scorecard' ? undefined : 'none'}}>
-                  {mainView === 'scorecard' && <ScorecardView key={dateRange} liveStats={liveStats} dateRange={dateRange} sendMessage={sendMessage}/>}
+                  {mainView === 'scorecard' && <ScorecardView key={dateRange} liveStats={liveStats} dateRange={dateRange} sendMessage={sendMessage} currentUser={currentUser} perms={perms}/>}
                 </div>
 
                 {/* FINANCE VIEW */}
@@ -3176,7 +3440,7 @@ function AppInner() {
                       { view:'google-ads',  icon:'chart',    label:'Google Ads', show:perms.googleAds },
                       { view:'gbp',         icon:'gbp',      label:'GBP',       show:perms.gbp },
                       { view:'finance',     icon:'finance',  label:'Finance',   show:perms.finance },
-                      { view:'scorecard',   icon:'briefing', label:'Scorecard', show:perms.teamGoals },
+                      { view:'scorecard',   icon:'briefing', label:'Scorecard', show:perms.scorecard },
                       { view:'search',      icon:'chart',    label:'Search & Visibility', show:perms.teamGoals },
                     ].filter(i=>i.show).map(i => (
                       <button key={i.view}
