@@ -27,14 +27,19 @@ export default async (req) => {
   if (req.method === 'OPTIONS') return new Response('', { status: 200, headers: CORS });
 
   try {
-    const props = 'dealname,amount,dealstage,pipeline,hubspot_owner_id,createdate,notes_last_contacted';
+    // hs_last_sales_activity_timestamp rolls up activity logged on the deal OR its
+    // associated contacts (so Aircall calls that attach to contacts still count). We use
+    // the most recent of it + notes_last_contacted as "last touch", and never flag a deal
+    // younger than the threshold (a 2-day-old deal isn't "cold").
+    const props = 'dealname,amount,dealstage,pipeline,hubspot_owner_id,createdate,notes_last_contacted,hs_last_sales_activity_timestamp';
     const [{ rows }, stageMap] = await Promise.all([
       fetchDealsInPipelines(HUBSPOT_TOKEN, ACTIVE_PIPELINES, props),
       fetchStageMap(),
     ]);
     const stageName = id => stageMap[id] || DEAL_STAGE_NAMES[id] || '';
     const now = Date.now();
-    const daysSince = ts => (ts ? Math.floor((now - new Date(ts).getTime()) / 864e5) : null);
+    const ms = ts => (ts ? new Date(ts).getTime() : 0);
+    const daysAgo = t => (t ? Math.floor((now - t) / 864e5) : null);
 
     const reps = {}; // ownerId -> stats
     for (const d of rows) {
@@ -45,16 +50,21 @@ export default async (req) => {
       const owner = p.hubspot_owner_id;
       if (!owner || NON_SALES_STAFF.has(owner) || !OWNER_NAMES[owner]) continue;
 
-      const ds = daysSince(p.notes_last_contacted);            // days since last logged contact (null = never)
-      const cold = ds == null || ds >= STALE_DAYS;
+      const lastTouch = Math.max(ms(p.notes_last_contacted), ms(p.hs_last_sales_activity_timestamp));
+      const created = ms(p.createdate);
+      const ageDays = daysAgo(created);                        // how old the deal is
+      const ds = lastTouch ? daysAgo(lastTouch) : null;        // days since last touch (null = never)
+      // Cold = no touch in N days, AND the deal is old enough to expect one.
+      const sinceRef = lastTouch ? daysAgo(lastTouch) : ageDays;
+      const cold = sinceRef != null && sinceRef >= STALE_DAYS;
       const isEstimate = stage.toLowerCase().includes('estimate');
-      const estCold = isEstimate && (ds == null || ds >= STALE_EST_DAYS);
+      const estCold = isEstimate && sinceRef != null && sinceRef >= STALE_EST_DAYS;
 
       const R = reps[owner] || (reps[owner] = { name: OWNER_NAMES[owner], open: 0, needsFollowUp: 0, staleEstimates: 0, deals: [] });
       R.open++;
       if (cold) {
         R.needsFollowUp++;
-        R.deals.push({ name: p.dealname || 'Unnamed deal', amount: Math.round(parseFloat(p.amount) || 0), stage, daysSince: ds, isEstimate });
+        R.deals.push({ name: p.dealname || 'Unnamed deal', amount: Math.round(parseFloat(p.amount) || 0), stage, daysSince: ds, ageDays, isEstimate });
       }
       if (estCold) R.staleEstimates++;
     }
