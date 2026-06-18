@@ -2279,6 +2279,8 @@ function RescueDrawer({ item, email, sendMessage, onClose }) {
     } catch { setErr('Could not generate follow-up right now.'); } finally { setLoading(false); }
   };
   const copy = (label, text) => { navigator.clipboard?.writeText(text); setCopied(label); setTimeout(() => setCopied(''), 1500); };
+  // Belt-and-suspenders: strip any stray markdown the model slips in so copy is paste-clean.
+  const clean = (t) => (t || '').replace(/\*\*|__/g, '').replace(/^#{1,6}\s*/gm, '').replace(/^\s*[-*•]\s+/gm, '').replace(/`/g, '').trim();
   return (
     <div className="rq-drawer-overlay" onClick={onClose}>
       <div className="rq-drawer" onClick={e => e.stopPropagation()}>
@@ -2321,22 +2323,24 @@ function RescueDrawer({ item, email, sendMessage, onClose }) {
             </button>
           )}
           {err && <div className="rq-ai-err">{err}</div>}
-          {ai && (ai.raw ? <div className="rq-ai-card">{ai.raw}</div> : (
+          {ai && (
             <div className="rq-ai">
-              {ai.whyItMatters && <div className="rq-ai-lead">{ai.whyItMatters}</div>}
-              {ai.bestNextAction && <div className="rq-ai-note"><strong>Next:</strong> {ai.bestNextAction}</div>}
-              {ai.talkTrack && <RqCopy label="Call opener" text={ai.talkTrack} copied={copied} onCopy={copy}/>}
-              {ai.sms && <RqCopy label="SMS" text={ai.sms} copied={copied} onCopy={copy}/>}
-              {ai.email && <RqCopy label="Email" text={ai.email} copied={copied} onCopy={copy}/>}
-              {ai.voicemail && <RqCopy label="Voicemail" text={ai.voicemail} copied={copied} onCopy={copy}/>}
-              {ai.objectionHandling && <div className="rq-ai-note"><strong>Likely objection:</strong> {ai.objectionHandling}</div>}
-              {ai.programPositioning && <div className="rq-ai-note"><strong>Position:</strong> {ai.programPositioning}</div>}
-              {ai.addOnSuggestion && ai.addOnSuggestion.toLowerCase() !== 'none' && <div className="rq-ai-note"><strong>Add-on:</strong> {ai.addOnSuggestion}</div>}
-              {ai.riskIfIgnored && <div className="rq-ai-note rq-ai-risk"><strong>If ignored:</strong> {ai.riskIfIgnored}</div>}
+              {ai.whyItMatters && <div className="rq-ai-lead">{clean(ai.whyItMatters)}</div>}
+              {ai.bestNextAction && <div className="rq-ai-note"><strong>Next:</strong> {clean(ai.bestNextAction)}</div>}
+              <div className="rq-ai-label">Ready to send</div>
+              {ai.talkTrack && <RqCopy label="Call opener" text={clean(ai.talkTrack)} copied={copied} onCopy={copy}/>}
+              {ai.sms && <RqCopy label="SMS" text={clean(ai.sms)} copied={copied} onCopy={copy}/>}
+              {(ai.emailSubject || ai.emailBody) && <RqEmail subject={clean(ai.emailSubject)} body={clean(ai.emailBody)} copied={copied} onCopy={copy}/>}
+              {ai.voicemail && <RqCopy label="Voicemail" text={clean(ai.voicemail)} copied={copied} onCopy={copy}/>}
+              {(ai.objectionHandling || ai.programPositioning || (ai.addOnSuggestion && ai.addOnSuggestion.toLowerCase() !== 'none') || ai.riskIfIgnored) && <div className="rq-ai-label">Coaching</div>}
+              {ai.objectionHandling && <div className="rq-ai-note"><strong>Likely objection:</strong> {clean(ai.objectionHandling)}</div>}
+              {ai.programPositioning && <div className="rq-ai-note"><strong>Position:</strong> {clean(ai.programPositioning)}</div>}
+              {ai.addOnSuggestion && ai.addOnSuggestion.toLowerCase() !== 'none' && <div className="rq-ai-note"><strong>Add-on:</strong> {clean(ai.addOnSuggestion)}</div>}
+              {ai.riskIfIgnored && <div className="rq-ai-note rq-ai-risk"><strong>If ignored:</strong> {clean(ai.riskIfIgnored)}</div>}
               {ai.dataMissing?.length > 0 && <div className="rq-ai-missing">Could be sharper with: {ai.dataMissing.join(', ')}</div>}
               <button className="rq-ai-regen" onClick={gen} disabled={loading}>{loading ? '…' : '↻ Regenerate'}</button>
             </div>
-          ))}
+          )}
         </div>
         <div style={{height:20}}/>
       </div>
@@ -2349,6 +2353,18 @@ function RqCopy({ label, text, copied, onCopy }) {
     <div className="rq-copy">
       <div className="rq-copy-hdr"><span>{label}</span><button onClick={() => onCopy(label, text)}>{copied === label ? 'Copied ✓' : 'Copy'}</button></div>
       <div className="rq-copy-body">{text}</div>
+    </div>
+  );
+}
+
+// Email gets its own card: subject line styled separately from the body; copy grabs both.
+function RqEmail({ subject, body, copied, onCopy }) {
+  const full = `Subject: ${subject || ''}\n\n${body || ''}`.trim();
+  return (
+    <div className="rq-copy">
+      <div className="rq-copy-hdr"><span>Email</span><button onClick={() => onCopy('Email', full)}>{copied === 'Email' ? 'Copied ✓' : 'Copy'}</button></div>
+      {subject && <div className="rq-email-subj"><span>Subject</span>{subject}</div>}
+      {body && <div className="rq-copy-body">{body}</div>}
     </div>
   );
 }

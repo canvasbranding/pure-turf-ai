@@ -1750,3 +1750,8 @@ html[data-theme="dark"] .kpi-reason-list { background:rgba(255,255,255,0.04); }
 .op-src-body span { flex:0 0 64px; color:var(--text-3); font-weight:600; }
 .op-datastate { font-style:normal; font-weight:700; }
 .op-ds-live { color:var(--green); } .op-ds-cached { color:#B58A00; } .op-ds-estimated, .op-ds-manual { color:var(--text-3); }
+/* Revenue Rescue AI drawer — structure + email subject */
+.rq-ai-label { font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-3); margin:14px 0 2px; }
+.rq-ai-label:first-child { margin-top:4px; }
+.rq-email-subj { display:flex; align-items:baseline; gap:8px; padding:8px 11px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; color:var(--text); }
+.rq-email-subj span { flex:0 0 auto; font-size:9.5px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-3); }
