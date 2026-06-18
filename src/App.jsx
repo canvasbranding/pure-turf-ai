@@ -249,7 +249,7 @@ const ALL_TILES = [
   // Meta Ads — disabled while the Windsor slot is reallocated to QuickBooks. Restore by
   // re-adding this tile + the facebook_ads fetch in stats.mjs once Meta is reconnected.
   // { key:'meta', lbl:'Meta Ads', val:1205, prefix:'$', sub:'↓ $484 CPA', dir:'dn', perm:'metaAds', group:'Marketing' },
-  { key:'gbp',       lbl:'GBP Views',    val:2841, prefix:'',  sub:'↑ 47 calls this week',  dir:'up', perm:'gbp',       group:'Marketing' },
+  { key:'gbp',       lbl:'GBP Impressions', val:2841, prefix:'',  sub:'↑ 47 calls this week',  dir:'up', perm:'gbp',       group:'Marketing' },
   { key:'pipeline',  lbl:'Pipeline',     val:1617, prefix:'',  sub:'deals · 2026',           dir:'',   perm:'pipeline',  group:'Sales' },
   // Business-outcome tiles — the funnel from leads → closes → customers → revenue.
   { key:'leads',      lbl:'New Leads',      val:0, prefix:'',  sub:'new this period',   dir:'up', perm:'pipeline', group:'Sales' },
@@ -335,17 +335,27 @@ function KPIsSection({ liveStats, statsLoading, rangeLabel, sendMessage }) {
         </div>
       </div>
 
-      {/* New by type */}
-      {byType && (
-        <div className="kpi-group">
-          <div className="kpi-group-label">New Customers by Program Type</div>
-          <div className="kpi-grid kpi-grid-3">
-            <KpiCard loading={statsLoading} label="Basic" value={fmtN(byType.basic)} sub="new this period"/>
-            <KpiCard loading={statsLoading} label="Essential" value={fmtN(byType.essential)} sub="new this period"/>
-            <KpiCard loading={statsLoading} label="Elite" value={fmtN(byType.elite)} sub="new this period"/>
+      {/* New by program type — bar chart across all tiers */}
+      {byType && (() => {
+        const TIERS = [['basic','Basic'],['essential','Essential'],['elite','Elite'],['mosquito','Mosquito'],['aeration','Aeration']];
+        const rows = TIERS.map(([k,l]) => ({ label:l, count: byType[k] || 0 })).filter(r => r.count > 0).sort((a,b) => b.count - a.count);
+        const max = Math.max(...rows.map(r => r.count), 1);
+        if (!rows.length) return null;
+        return (
+          <div className="kpi-group">
+            <div className="kpi-group-label">New Customers by Program Type · {rangeLabel}</div>
+            <div className="kpi-reason-list">
+              {rows.map(r => (
+                <div key={r.label} className="kpi-reason-row">
+                  <div className="kpi-reason-name">{r.label}</div>
+                  <div className="kpi-reason-bar-wrap"><div className="kpi-reason-bar" style={{width:`${Math.round(r.count / max * 100)}%`}}/></div>
+                  <div className="kpi-reason-count">{r.count}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Cancel reasons */}
       {cancelReasons.length > 0 && (
@@ -783,7 +793,7 @@ function GBPView({ liveStats, statsLoading, dateRange, sendMessage }) {
     ? Math.round(locs.filter(l => l.completeness != null).reduce((s, l) => s + l.completeness, 0) / locs.filter(l => l.completeness != null).length) : null;
 
   const metrics = d ? [
-    { label:'Profile Views',      val: fmtN(d.views),      icon:'📍', desc:'Impressions on Google' },
+    { label:'Search Impressions', val: fmtN(d.views),      icon:'📍', desc:'Times shown in search + maps' },
     { label:'Phone Calls',        val: fmtN(d.calls),      icon:'📞', desc:'Calls from profile' },
     { label:'Direction Requests', val: fmtN(d.directions), icon:'🧭', desc:'Get directions taps' },
     { label:'Website Clicks',     val: fmtN(d.webClicks),  icon:'🔗', desc:'Clicks to website' },
@@ -817,6 +827,7 @@ function GBPView({ liveStats, statsLoading, dateRange, sendMessage }) {
           </div>
         ))}
       </div>
+      {d && <div className="sc-note" style={{marginTop:-6, marginBottom:14}}>Performance totals are summed across all {locs.length || 4} locations (via Windsor). Phone-call counts can lag a few days behind Google.</div>}
 
       {/* Reputation + profile health (Search Atlas) */}
       {(reviews || avgCompleteness != null) && (
@@ -1904,6 +1915,32 @@ function SearchVisibilityView({ sendMessage }) {
                   <div key={k.label} className="dv-kpi-card"><div className="dv-kpi-label">{k.label}</div><div className="dv-kpi-val">{k.val}</div></div>
                 ))}
               </div>
+              {/* Ranking distribution — where our tracked keywords sit */}
+              {(() => {
+                const at1 = kw.atTop1||0, t3 = kw.top3||0, p1 = kw.page1||0, rk = kw.ranked||0;
+                const segs = [
+                  { lbl:'#1',     n: at1,                  c:'#10B981' },
+                  { lbl:'#2–3',   n: Math.max(0, t3 - at1), c:'#4F82A0' },
+                  { lbl:'#4–10',  n: Math.max(0, p1 - t3),  c:'#8FA9B8' },
+                  { lbl:'#11+',   n: Math.max(0, rk - p1),  c:'#D8D5D0' },
+                ];
+                if (rk <= 0) return null;
+                return (
+                  <>
+                    <div className="dv-section-label" style={{marginTop:14}}>Where We Rank · {rk} keywords</div>
+                    <div className="sv-dist-bar">
+                      {segs.filter(s => s.n > 0).map(s => (
+                        <div key={s.lbl} className="sv-dist-seg" style={{flex:s.n, background:s.c}} title={`${s.lbl}: ${s.n}`}/>
+                      ))}
+                    </div>
+                    <div className="sv-dist-legend">
+                      {segs.map(s => (
+                        <div key={s.lbl} className="sv-dist-leg"><span className="sv-dist-dot" style={{background:s.c}}/>{s.lbl} <strong>{s.n}</strong></div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
               {data.visibilityTrend?.length > 1 && (
                 <>
                   <div className="dv-section-label" style={{marginTop:4}}>Search Visibility Trend</div>

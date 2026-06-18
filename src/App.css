@@ -342,6 +342,12 @@ html[data-theme="dark"] .snav-btn.active {
 .sc-rep-table .dv-col-num { width:52px; }
 
 /* Search & Visibility */
+.sv-dist-bar { display:flex; height:14px; border-radius:7px; overflow:hidden; gap:2px; margin-bottom:10px; }
+.sv-dist-seg { min-width:4px; transition:flex 0.6s var(--ease); }
+.sv-dist-legend { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:18px; font-size:11.5px; color:var(--text-2); }
+.sv-dist-leg { display:flex; align-items:center; gap:6px; }
+.sv-dist-dot { width:9px; height:9px; border-radius:2px; display:inline-block; flex-shrink:0; }
+.sv-dist-leg strong { color:var(--text); font-weight:600; }
 .sv-hero { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-radius:12px; background:var(--surface-2,rgba(127,127,127,0.08)); margin-bottom:4px; }
 .sv-hero-val { font-size:38px; font-weight:800; color:var(--text-1); line-height:1; display:flex; align-items:baseline; gap:10px; }
 .sv-hero-lbl { font-size:11px; color:var(--text-3); margin-top:6px; }
@@ -647,9 +653,11 @@ html[data-theme="light"] .skel::after { background:linear-gradient(90deg,transpa
   .split-area { flex:1; display:flex; flex-direction:row; overflow:hidden; position:relative; }
 
   /* ---- Left column: full-screen on mobile ---- */
-  .left-col {
+  /* Scoped to .split-area so these win over the desktop base `.left-col{overflow:hidden}`
+     rule that appears later in the file — otherwise the dashboard can't scroll. */
+  .split-area .left-col {
     position:absolute; inset:0; width:100%; height:100%;
-    overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch;
+    overflow-y:auto !important; overflow-x:hidden; -webkit-overflow-scrolling:touch;
     transition:opacity 0.22s ease, transform 0.22s ease;
   }
   .left-col.mobile-hidden { opacity:0; pointer-events:none; transform:translateY(8px); }
@@ -666,8 +674,9 @@ html[data-theme="light"] .skel::after { background:linear-gradient(90deg,transpa
   .chat-panel.mobile-active { opacity:1; pointer-events:auto; transform:translateY(0); z-index:1; }
 
   /* ---- Dashboard scroll ---- */
+  /* Wide, near-edge-to-edge cards on mobile (small side margin), app-style. */
   .dash-col { flex:none; border-right:none; overflow:visible; display:block; }
-  .dash-scroll { overflow:visible; padding:20px 16px 32px; min-height:100%; }
+  .dash-scroll { overflow:visible; padding:16px 10px 32px; min-height:100%; }
 
   /* ---- Chat ---- */
   .chat-messages { padding:16px 16px 8px; }
@@ -703,7 +712,9 @@ html[data-theme="light"] .skel::after { background:linear-gradient(90deg,transpa
   .chat-panel-hdr { padding:0 16px; height:46px; }
 
   /* ---- Goals / KPI sections ---- */
-  .goals-col { padding:0 16px 32px; }
+  /* Pass-through wrapper — the inner .goals-scroll / .data-view-scroll owns the padding,
+     so cards get a single small side margin (no doubled-up gutter). */
+  .goals-col { padding:0; }
 
   /* ---- Bottom tab bar ---- */
   .bottom-tab-bar {
@@ -770,7 +781,8 @@ html[data-theme="light"] .skel::after { background:linear-gradient(90deg,transpa
 
 /* ── MOBILE SMALL ────────────────────────────────────────── */
 @media (max-width:480px) {
-  .dash-scroll { padding:16px 14px 32px; }
+  /* Near-edge-to-edge cards (very small side margin) for a native-app feel. */
+  .dash-scroll, .data-view-scroll, .goals-scroll { padding-left:8px; padding-right:8px; }
   .chat-messages { padding:12px 14px 6px; }
   .chat-input-area { padding:8px 14px; padding-bottom:max(12px,env(safe-area-inset-bottom)); }
   .metric-grid { gap:8px; }
@@ -911,7 +923,7 @@ html[data-theme="dark"] .goal-card { background:rgba(255,255,255,0.04); }
     overflow-y:visible; overflow-x:hidden;
     display:block;
   }
-  .goals-scroll { padding:20px 16px 32px; overflow:visible; flex:none; }
+  .goals-scroll { padding:20px 10px 32px; overflow:visible; flex:none; }
   .goal-card { padding:16px 14px 12px; }
   .goal-actual { font-size:26px; }
   .goals-title { font-size:28px; }
@@ -1180,7 +1192,7 @@ html[data-theme="dark"] .dv-deal-row { background:rgba(255,255,255,0.04); }
 
 /* Mobile */
 @media (max-width:768px) {
-  .data-view-scroll { padding:20px 16px 32px; overflow:visible; flex:none; }
+  .data-view-scroll { padding:20px 10px 32px; overflow:visible; flex:none; }
   .dv-kpi-row { grid-template-columns:1fr 1fr; gap:8px; }
   .dv-kpi-row-2 { grid-template-columns:1fr 1fr; }
   .dv-funnel-label { width:120px; font-size:11.5px; }
