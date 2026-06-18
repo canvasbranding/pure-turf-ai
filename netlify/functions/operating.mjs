@@ -120,7 +120,7 @@ export default async (req) => {
 
     if (myName) {
       for (const x of salesScored.filter(x => x.scored.ownerName === myName).slice(0, 25)) items.push(indItem(x, 'rep'));
-    } else {
+    } else if (isManager) {
       for (const x of salesScored.slice(0, 10)) items.push(indItem(x, 'manager')); // biggest deals to know about
       for (const R of Object.values(byRep)) {
         if (NON_SALES_STAFF.has(R.ownerId)) continue; // only real sales reps get coaching rollups
@@ -143,7 +143,7 @@ export default async (req) => {
     }
 
     // ── Provider: GOALS (pacing risk) — manager/leadership only ───────────────
-    if (isManager || role === 'viewer') {
+    if (isManager) {
       const g = goalsBlob || {};
       const dayOfYear = Math.floor((now - Date.UTC(yr, 0, 1)) / 864e5) + 1;
       const yearFrac = Math.min(1, dayOfYear / 365);
@@ -191,7 +191,7 @@ export default async (req) => {
 
     return new Response(JSON.stringify({
       ok: true, role, repName: myName, items: active, counts,
-      providers: ['sales', ...(isManager || role === 'viewer' ? ['goals'] : [])],
+      providers: [...(myName || isManager ? ['sales'] : []), ...(isManager ? ['goals'] : [])],
       fetchedAt: new Date(now).toISOString(),
     }), { status: 200, headers: { ...CORS, 'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=300, stale-while-revalidate=900' } });
   } catch (err) {
