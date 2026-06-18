@@ -42,6 +42,7 @@ const Icon = ({ name, size = 16 }) => {
     goals:    <><path d="M6.5 2.5h7v5a3.5 3.5 0 01-7 0v-5z" strokeLinejoin="round"/><path d="M6.5 4.5H4.5a1.5 1.5 0 000 3h2" strokeLinecap="round"/><path d="M13.5 4.5h2a1.5 1.5 0 010 3h-2" strokeLinecap="round"/><path d="M10 10.5v2M7.5 14.5h5" strokeLinecap="round"/><path d="M7 16.5h6" strokeLinecap="round"/></>,
     edit:     <><path d="M14.5 3.5l2 2L6 16H4v-2L14.5 3.5z" strokeLinejoin="round"/></>,
     check2:   <path d="M3.5 10l4.5 4.5 8.5-9" strokeLinecap="round" strokeLinejoin="round"/>,
+    rescue:   <><circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="3"/><path d="M4.7 4.7l2.9 2.9M12.4 12.4l2.9 2.9M15.3 4.7l-2.9 2.9M7.6 12.4l-2.9 2.9" strokeLinecap="round"/></>,
     signout:  <path d="M12.5 6V4a1.5 1.5 0 00-1.5-1.5H5A1.5 1.5 0 003.5 4v12A1.5 1.5 0 005 17.5h6a1.5 1.5 0 001.5-1.5v-2M8 10h9.5M14 6.5L17.5 10 14 13.5" strokeLinecap="round" strokeLinejoin="round"/>,
   };
   return (
@@ -76,14 +77,14 @@ const SALES_GOALS_EMAILS   = ['dturner@pureturfllc.com', 'dhamby@pureturfllc.com
 
 const DEFAULT_PERMISSIONS = {
   // finance: hidden for now (QuickBooks integration stays built — flip these to true to restore).
-  admin:        { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: true,  salesGoals: true,  scorecard: true, scorecardTeam: true,  manageUsers: true  },
-  owner:        { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  manageUsers: false },
-  marketing:    { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  manageUsers: false },
-  executive:    { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: false, goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  manageUsers: false },
-  sales_manager:{ googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: true,  goalAdmin: false, teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  manageUsers: false },
-  sales:        { googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: false, goalAdmin: false, teamGoals: false, financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: false, manageUsers: false },
+  admin:        { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: true,  salesGoals: true,  scorecard: true, scorecardTeam: true,  rescue: true, rescueTeam: true,  manageUsers: true  },
+  owner:        { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  rescue: true, rescueTeam: true,  manageUsers: false },
+  marketing:    { googleAds: true,  metaAds: true,  gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: true,  goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  rescue: true, rescueTeam: true,  manageUsers: false },
+  executive:    { googleAds: true,  metaAds: false, gbp: true,  pipeline: true,  finance: false, mondayBrief: true,  adminPanel: false, goalAdmin: true,  teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  rescue: true, rescueTeam: true,  manageUsers: false },
+  sales_manager:{ googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: true,  goalAdmin: false, teamGoals: true,  financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: true,  rescue: true, rescueTeam: true,  manageUsers: false },
+  sales:        { googleAds: false, metaAds: false, gbp: false, pipeline: true,  finance: false, mondayBrief: false, adminPanel: false, goalAdmin: false, teamGoals: false, financeGoals: false, salesGoals: false, scorecard: true, scorecardTeam: false, rescue: true, rescueTeam: false, manageUsers: false },
 };
-const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', finance:'Finance', mondayBrief:'Mon. Brief', adminPanel:'Admin Panel', goalAdmin:'Goal Admin', teamGoals:'Team Goals', financeGoals:'Finance Goals', salesGoals:'Sales Goals', scorecard:'Scorecard', scorecardTeam:'Team Scorecard', manageUsers:'Manage Users' };
+const MODULE_LABELS = { googleAds:'Google Ads', metaAds:'Meta Ads', gbp:'GBP', pipeline:'Pipeline', finance:'Finance', mondayBrief:'Mon. Brief', adminPanel:'Admin Panel', goalAdmin:'Goal Admin', teamGoals:'Team Goals', financeGoals:'Finance Goals', salesGoals:'Sales Goals', scorecard:'Scorecard', scorecardTeam:'Team Scorecard', rescue:'Revenue Rescue', rescueTeam:'Team Rescue', manageUsers:'Manage Users' };
 const ROLE_LABELS = { admin:'Admin', owner:'Owner', marketing:'Marketing', executive:'Executive', sales_manager:'Sales Mgr', sales:'Sales' };
 
 // Friendly names for data sources — used by the data-health banner and tile error states
@@ -1065,7 +1066,7 @@ function GBPView({ sendMessage }) {
 }
 
 // ══ PIPELINE VIEW ══════════════════════════════════════════════════════════
-function PipelineView({ liveStats, statsLoading, dateRange, sendMessage }) {
+function PipelineView({ liveStats, statsLoading, dateRange, sendMessage, onNav }) {
   const [pipeView, setPipeView] = useState('sales'); // 'sales' | 'commercial'
   const hasCommercial = !!liveStats?.hubspotCommercial;
   const h = pipeView === 'commercial' ? liveStats?.hubspotCommercial : liveStats?.hubspot;
@@ -1089,6 +1090,8 @@ function PipelineView({ liveStats, statsLoading, dateRange, sendMessage }) {
         </div>
         <div className="dv-period">{rangeLabel}</div>
       </div>
+
+      {onNav && pipeView === 'sales' && <RescueMiniWidget email={currentUserEmail} onNav={onNav} variant="banner"/>}
 
       {hasCommercial && (
         <div className="pipe-toggle">
@@ -2108,7 +2111,313 @@ function RepScorecardBody({ repRow, repEmail, repName, repGoals, rangeLabel, loa
   );
 }
 
-function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }) {
+// ── Revenue Rescue ────────────────────────────────────────────────────────────
+// The Lead Quality + Follow-Up Rescue engine surfaced for reps (their queue),
+// managers (team follow-up health), and leadership (revenue at risk). Scored
+// on-demand server-side from live HubSpot; user actions persist to Blobs.
+const RQ_BADGE = {
+  'Hot': 'rq-hot', 'High Priority': 'rq-high', 'Needs Fast Follow-Up': 'rq-fast',
+  'At Risk': 'rq-risk', 'Going Cold': 'rq-cold', 'Existing Customer Upsell': 'rq-upsell',
+  'Duplicate': 'rq-dup', 'Low Priority': 'rq-low',
+};
+const rqFmt$ = v => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v||0}`;
+
+function RescueCard({ item, onOpen, onAct, busy }) {
+  const since = item.daysSinceActivity != null ? `${item.daysSinceActivity}d ago` : 'never';
+  return (
+    <div className="rq-card" onClick={() => onOpen(item)}>
+      <div className="rq-card-top">
+        <span className={`rq-badge ${RQ_BADGE[item.priorityLevel] || 'rq-low'}`}>{item.priorityLevel}</span>
+        <span className="rq-score" title="Priority score">{item.priorityScore}</span>
+        <span className="rq-value">{rqFmt$(item.value)}</span>
+      </div>
+      <div className="rq-name">{item.customer || item.name}</div>
+      <div className="rq-meta">{item.stage} · {item.source} · last touch {since}{item.ownerName ? ` · ${item.ownerName.split(' ')[0]}` : ''}</div>
+      <div className="rq-reason">{item.reason}</div>
+      <div className="rq-action"><Icon name="arrowR" size={12}/> {item.recommendedAction}</div>
+      <div className="rq-btns" onClick={e => e.stopPropagation()}>
+        <button className="rq-btn rq-btn-primary" onClick={() => onOpen(item)}>Follow-up &amp; AI</button>
+        <a className="rq-btn" href={item.hubspotUrl} target="_blank" rel="noreferrer">HubSpot ↗</a>
+        <button className="rq-btn" disabled={busy} onClick={() => onAct(item, 'mark_contacted')}>✓ Contacted</button>
+        <button className="rq-btn" disabled={busy} onClick={() => onAct(item, 'snooze', { days: 3 })}>Snooze 3d</button>
+        <button className="rq-btn rq-btn-ghost" disabled={busy} onClick={() => onAct(item, 'dismiss')}>Dismiss</button>
+      </div>
+    </div>
+  );
+}
+
+function RescueDrawer({ item, email, sendMessage, onClose }) {
+  const [ai, setAi] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const [copied, setCopied] = React.useState('');
+  const gen = async () => {
+    setLoading(true); setErr('');
+    try {
+      const res = await fetch('/.netlify/functions/rescue-ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deal: item, repName: (item.ownerName || '').split(' ')[0] || 'the rep' }) });
+      const d = await res.json();
+      if (d.ok && d.result) setAi(d.result); else setErr(d.error || 'Could not generate follow-up.');
+    } catch { setErr('Could not generate follow-up right now.'); } finally { setLoading(false); }
+  };
+  const copy = (label, text) => { navigator.clipboard?.writeText(text); setCopied(label); setTimeout(() => setCopied(''), 1500); };
+  return (
+    <div className="rq-drawer-overlay" onClick={onClose}>
+      <div className="rq-drawer" onClick={e => e.stopPropagation()}>
+        <div className="rq-drawer-hdr">
+          <div>
+            <span className={`rq-badge ${RQ_BADGE[item.priorityLevel] || 'rq-low'}`}>{item.priorityLevel}</span>
+            <span className="rq-drawer-score">Score {item.priorityScore}</span>
+          </div>
+          <button className="rq-drawer-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="rq-drawer-name">{item.customer || item.name}</div>
+        <div className="rq-drawer-sub">{item.name}</div>
+
+        <div className="rq-facts">
+          {[['Value', rqFmt$(item.value)], ['Stage', item.stage], ['Source', item.source],
+            ['Owner', item.ownerName || '—'], ['Age', item.daysSinceCreated != null ? `${item.daysSinceCreated}d` : '—'],
+            ['In stage', item.daysInStage != null ? `${item.daysInStage}d` : '—'],
+            ['Last touch', item.daysSinceActivity != null ? `${item.daysSinceActivity}d ago` : 'never'],
+            ['Impact', item.revenueImpact]].map(([k, v]) => (
+            <div key={k} className="rq-fact"><div className="rq-fact-k">{k}</div><div className="rq-fact-v">{v}</div></div>
+          ))}
+        </div>
+
+        <div className="rq-drawer-section">Why it's flagged</div>
+        <ul className="rq-breakdown">
+          {item.breakdown?.map((b, i) => <li key={i}><span>{b.label}</span><span className={b.points >= 0 ? 'rq-pts-pos' : 'rq-pts-neg'}>{b.points >= 0 ? '+' : ''}{b.points}</span></li>)}
+        </ul>
+        <div className="rq-action rq-action-lg"><Icon name="arrowR" size={12}/> {item.recommendedAction}</div>
+
+        <div className="rq-drawer-actions">
+          <a className="rq-btn" href={item.hubspotUrl} target="_blank" rel="noreferrer">Open in HubSpot ↗</a>
+          <button className="rq-btn" onClick={() => sendMessage(`Why is the deal "${item.name}" (${item.stage}, ${rqFmt$(item.value)}, source ${item.source}, ${item.daysSinceActivity ?? '—'} days since last activity) a priority, and what should I do? Be specific.`)}>Ask AI why</button>
+        </div>
+
+        <div className="rq-ai-block">
+          {!ai && (
+            <button className="rq-ai-cta" onClick={gen} disabled={loading}>
+              <Icon name="briefing" size={15}/>
+              <span>{loading ? 'Writing your follow-up…' : 'Generate follow-up (call · SMS · email)'}</span>
+            </button>
+          )}
+          {err && <div className="rq-ai-err">{err}</div>}
+          {ai && (ai.raw ? <div className="rq-ai-card">{ai.raw}</div> : (
+            <div className="rq-ai">
+              {ai.whyItMatters && <div className="rq-ai-lead">{ai.whyItMatters}</div>}
+              {ai.bestNextAction && <div className="rq-ai-note"><strong>Next:</strong> {ai.bestNextAction}</div>}
+              {ai.talkTrack && <RqCopy label="Call opener" text={ai.talkTrack} copied={copied} onCopy={copy}/>}
+              {ai.sms && <RqCopy label="SMS" text={ai.sms} copied={copied} onCopy={copy}/>}
+              {ai.email && <RqCopy label="Email" text={ai.email} copied={copied} onCopy={copy}/>}
+              {ai.voicemail && <RqCopy label="Voicemail" text={ai.voicemail} copied={copied} onCopy={copy}/>}
+              {ai.objectionHandling && <div className="rq-ai-note"><strong>Likely objection:</strong> {ai.objectionHandling}</div>}
+              {ai.programPositioning && <div className="rq-ai-note"><strong>Position:</strong> {ai.programPositioning}</div>}
+              {ai.addOnSuggestion && ai.addOnSuggestion.toLowerCase() !== 'none' && <div className="rq-ai-note"><strong>Add-on:</strong> {ai.addOnSuggestion}</div>}
+              {ai.riskIfIgnored && <div className="rq-ai-note rq-ai-risk"><strong>If ignored:</strong> {ai.riskIfIgnored}</div>}
+              {ai.dataMissing?.length > 0 && <div className="rq-ai-missing">Could be sharper with: {ai.dataMissing.join(', ')}</div>}
+              <button className="rq-ai-regen" onClick={gen} disabled={loading}>{loading ? '…' : '↻ Regenerate'}</button>
+            </div>
+          ))}
+        </div>
+        <div style={{height:20}}/>
+      </div>
+    </div>
+  );
+}
+
+function RqCopy({ label, text, copied, onCopy }) {
+  return (
+    <div className="rq-copy">
+      <div className="rq-copy-hdr"><span>{label}</span><button onClick={() => onCopy(label, text)}>{copied === label ? 'Copied ✓' : 'Copy'}</button></div>
+      <div className="rq-copy-body">{text}</div>
+    </div>
+  );
+}
+
+function RevenueRescueView({ liveStats, sendMessage, currentUser, perms }) {
+  const isManager = !!perms?.rescueTeam;
+  const email = currentUser?.email || '';
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [drawer, setDrawer] = useState(null);
+  const [repFilter, setRepFilter] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  const load = useCallback(() => {
+    if (!email) return;
+    setLoading(true);
+    fetch(`/.netlify/functions/rescue?requester_email=${encodeURIComponent(email)}`)
+      .then(r => r.json()).then(d => { if (d.ok) { setData(d); setErr(''); } else setErr(d.error || 'Could not load'); })
+      .catch(() => setErr('Could not load Revenue Rescue right now.')).finally(() => setLoading(false));
+  }, [email]);
+  useEffect(() => { load(); }, [load]);
+
+  const act = async (item, action, extra = {}) => {
+    setBusyId(item.dealId);
+    try {
+      await fetch('/.netlify/functions/rescue-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, dealId: item.dealId, requester_email: email, ...extra }) });
+      setData(d => d ? { ...d, queue: d.queue.filter(q => q.dealId !== item.dealId) } : d);
+      if (drawer?.dealId === item.dealId) setDrawer(null);
+    } finally { setBusyId(null); }
+  };
+
+  const queue = data?.queue || [];
+  const shown = repFilter ? queue.filter(q => q.ownerName === repFilter) : queue;
+  const L = data?.leadership || {};
+  const sourceQuality = liveStats?.sourceQuality || [];
+
+  return (
+    <div className="data-view-scroll">
+      <div className="dv-header">
+        <div>
+          <div className="dv-eyebrow">Lead Quality + Follow-Up Rescue</div>
+          <h2 className="dv-title">Revenue Rescue</h2>
+        </div>
+        <button className="sc-add-btn" onClick={load} disabled={loading}>{loading ? '…' : '↻ Refresh'}</button>
+      </div>
+
+      {err && <div className="dv-empty">⚠ {err}</div>}
+
+      {/* Leadership / manager summary */}
+      {isManager && data && (
+        <div className="dv-kpi-row">
+          {[
+            { label: 'Revenue at Risk', val: rqFmt$(L.revenueAtRisk || 0), sub: 'open rescue value' },
+            { label: 'Open Rescue Items', val: L.openRescue || 0, sub: 'across the team' },
+            { label: 'New Uncontacted', val: L.newUncontacted || 0, sub: 'no contact logged' },
+            { label: 'Stale Estimates', val: L.staleEstimates || 0, sub: '>7d in stage' },
+          ].map(k => (
+            <div key={k.label} className="dv-kpi-card">
+              <div className="dv-kpi-label">{k.label}</div>
+              <div className="dv-kpi-val">{loading ? <span className="dv-skel"/> : k.val}</div>
+              <div className="dv-kpi-sub">{k.sub}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Manager: team follow-up health table */}
+      {isManager && data?.byRep?.length > 0 && (
+        <>
+          <div className="dv-section-label">Team Follow-Up Health <span className="dv-section-note">tap a rep to filter their queue</span></div>
+          <div className="dv-table sc-rep-table">
+            <div className="dv-table-hdr">
+              <div className="dv-col-main">Rep</div>
+              <div className="dv-col-num">Open</div>
+              <div className="dv-col-num">Cont.%</div>
+              <div className="dv-col-num">Stale</div>
+              <div className="dv-col-num">Rescue</div>
+              <div className="dv-col-num">At Risk</div>
+            </div>
+            {data.byRep.map(r => (
+              <div key={r.name} className={`dv-table-row${repFilter === r.name ? ' rq-row-active' : ''}`} onClick={() => setRepFilter(repFilter === r.name ? null : r.name)}>
+                <div className="dv-col-main dv-rep-name">{r.name}</div>
+                <div className="dv-col-num">{r.assigned}</div>
+                <div className="dv-col-num">{r.contactedRate != null ? `${r.contactedRate}%` : '–'}</div>
+                <div className="dv-col-num">{r.staleEstimates}</div>
+                <div className="dv-col-num">{r.rescueCount}</div>
+                <div className="dv-col-num">{rqFmt$(r.revenueAtRisk)}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Lead source quality */}
+      {isManager && sourceQuality.length > 0 && (
+        <>
+          <div className="dv-section-label">Lead Source Quality <span className="dv-section-note">close rate &amp; revenue per quote — not just cost</span></div>
+          <div className="rq-src-grid">
+            {sourceQuality.slice(0, 6).map(s => (
+              <div key={s.source} className="rq-src-card">
+                <div className="rq-src-name">{s.source}</div>
+                <div className="rq-src-rev">{rqFmt$(s.revenue)}<span> revenue</span></div>
+                <div className="rq-src-stats">
+                  <span>{s.closeRate != null ? `${s.closeRate}%` : '–'} close</span>
+                  <span>{rqFmt$(s.revenuePerQuote)}/quote</span>
+                  {s.cpa != null && <span>${s.cpa} CPA</span>}
+                </div>
+                <div className="rq-src-vol">{s.quotes} quotes · {s.closedWon} won</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Queue */}
+      <div className="dv-section-label" style={{marginTop:18}}>
+        {isManager ? (repFilter ? `${repFilter.split(' ')[0]}'s Rescue Queue` : 'Team Rescue Queue') : 'My Rescue Queue'}
+        <span className="dv-section-note">{shown.length} item{shown.length === 1 ? '' : 's'}{repFilter ? ' · ' : ''}{repFilter && <button className="rq-clear" onClick={() => setRepFilter(null)}>clear</button>}</span>
+      </div>
+      {loading ? (
+        <div className="dv-loading-rows">{[1,2,3].map(i => <div key={i} className="dv-row-skel"/>)}</div>
+      ) : shown.length > 0 ? (
+        <div className="rq-list">
+          {shown.map(item => <RescueCard key={item.dealId} item={item} onOpen={setDrawer} onAct={act} busy={busyId === item.dealId}/>)}
+        </div>
+      ) : (
+        <div className="dv-empty">{data ? '🎉 Nothing needs rescuing right now — queue is clear.' : 'Loading…'}</div>
+      )}
+
+      <button className="dv-ai-btn" onClick={() => sendMessage(isManager ? 'Give me a Revenue Rescue summary for the sales team — biggest revenue at risk, which reps are behind on follow-up, and the single most important thing to do today.' : 'Give me my Revenue Rescue plan for today — which deals to work first and why.')}>
+        <span>Ask AI for a rescue plan</span>
+        <Icon name="arrowR" size={13}/>
+      </button>
+      <div style={{height:32}}/>
+
+      {drawer && <RescueDrawer item={drawer} email={email} sendMessage={sendMessage} onClose={() => setDrawer(null)}/>}
+    </div>
+  );
+}
+
+// Self-fetching Revenue Rescue widget reused across the app: a compact "banner"
+// (Pipeline/Scorecard) and a richer "today" card (Dashboard) showing the top
+// priorities. Clicking opens the full Revenue Rescue view via onNav.
+function RescueMiniWidget({ email, onNav, variant = 'banner' }) {
+  const [data, setData] = React.useState(null);
+  React.useEffect(() => {
+    if (!email) return;
+    let cancelled = false;
+    fetch(`/.netlify/functions/rescue?requester_email=${encodeURIComponent(email)}`)
+      .then(r => r.json()).then(d => { if (!cancelled && d.ok) setData(d); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [email]);
+  if (!data) return null;
+  const queue = data.queue || [];
+  const atRisk = data.role === 'manager' ? (data.leadership?.revenueAtRisk || 0) : queue.filter(i => i.revenueImpact !== 'Low').reduce((t, i) => t + i.value, 0);
+  if (queue.length === 0) return null;
+
+  if (variant === 'today') {
+    return (
+      <div className="rq-today">
+        <div className="rq-today-hdr">
+          <div><Icon name="rescue" size={15}/> <strong>Top priorities today</strong></div>
+          <button onClick={onNav}>Open Revenue Rescue →</button>
+        </div>
+        <div className="rq-today-list">
+          {queue.slice(0, 4).map(i => (
+            <button key={i.dealId} className="rq-today-item" onClick={onNav}>
+              <span className={`rq-badge ${RQ_BADGE[i.priorityLevel] || 'rq-low'}`}>{i.priorityLevel}</span>
+              <span className="rq-today-name">{i.customer || i.name}</span>
+              <span className="rq-today-act">{i.recommendedAction}</span>
+              <span className="rq-today-val">{rqFmt$(i.value)}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <button className="rq-banner" onClick={onNav}>
+      <Icon name="rescue" size={15}/>
+      <span><strong>{queue.length}</strong> {data.role === 'manager' ? 'deals' : 'of your deals'} need follow-up · <strong>{rqFmt$(atRisk)}</strong> at risk</span>
+      <span className="rq-banner-cta">Open Revenue Rescue →</span>
+    </button>
+  );
+}
+
+function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms, onNav }) {
   const [activity, setActivity] = React.useState(null);
   const [followups, setFollowups] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
@@ -2235,6 +2544,8 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
         <div><div className="dv-eyebrow">Team Sales Performance · {rangeLabel}</div><h2 className="dv-title">Team Scorecard</h2></div>
         <button className="sc-add-btn" onClick={() => setForm({})}>+ Set a goal</button>
       </div>
+
+      {onNav && <RescueMiniWidget email={currentUser?.email} onNav={onNav} variant="banner"/>}
 
       {(emailsOff || callsOff) && (
         <div className="data-health data-health-ok" role="status" style={{marginBottom:12, paddingTop:0}}>
@@ -3350,6 +3661,7 @@ function AppInner() {
                 ...(perms.googleAds ? [{ key:'gads',  icon:'chart',    label:'Google Ads' }] : []),
                 ...(perms.gbp      ? [{ key:'gbp',   icon:'gbp',      label:'GBP'        }] : []),
                 ...(perms.pipeline ? [{ key:'pipe',  icon:'pipeline', label:'Pipeline'   }] : []),
+                ...(perms.rescue ? [{ key:'rescue', icon:'rescue', label:'Revenue Rescue' }] : []),
                 ...(perms.finance ? [{ key:'finance', icon:'finance', label:'Finance' }] : []),
                 ...(perms.scorecard ? [{ key:'score', icon:'briefing', label:'Scorecard' }] : []),
                 ...(perms.teamGoals ? [{ key:'search', icon:'chart', label:'Search & Visibility' }] : []),
@@ -3361,6 +3673,7 @@ function AppInner() {
                     (mainView==='google-ads'&& item.key==='gads') ||
                     (mainView==='gbp'       && item.key==='gbp') ||
                     (mainView==='pipeline'  && item.key==='pipe') ||
+                    (mainView==='rescue'    && item.key==='rescue') ||
                     (mainView==='scorecard' && item.key==='score') ||
                     (mainView==='finance'   && item.key==='finance') ||
                     (mainView==='search'    && item.key==='search') ? ' active' : ''}`}
@@ -3371,6 +3684,7 @@ function AppInner() {
                     else if (item.key === 'gads')  { setMobileTab('google-ads'); setMainView('google-ads'); }
                     else if (item.key === 'gbp')   { setMobileTab('dashboard'); setMainView('gbp'); }
                     else if (item.key === 'pipe')  { setMobileTab('pipeline'); setMainView('pipeline'); }
+                    else if (item.key === 'rescue'){ setMobileTab('dashboard'); setMainView('rescue'); }
                     else if (item.key === 'score') { setMobileTab('dashboard'); setMainView('scorecard'); }
                     else if (item.key === 'finance'){ setMobileTab('dashboard'); setMainView('finance'); }
                     else if (item.key === 'search'){ setMobileTab('dashboard'); setMainView('search'); }
@@ -3407,12 +3721,12 @@ function AppInner() {
                 <span className="mobile-header-title">
                   {mobileTab === 'chat' ? 'Pure Turf AI' : ({
                     dashboard: 'Dashboard', goals: 'Goals', 'google-ads': 'Google Ads',
-                    gbp: 'GBP', pipeline: 'Pipeline', scorecard: 'Scorecard',
+                    gbp: 'GBP', pipeline: 'Pipeline', rescue: 'Revenue Rescue', scorecard: 'Scorecard',
                     search: 'Search & Visibility', finance: 'Finance',
                   }[mainView] || 'Dashboard')}
                 </span>
                 <div className="mobile-header-right">
-                  {mobileTab !== 'chat' && !['scorecard','search','finance','gbp'].includes(mainView) && (
+                  {mobileTab !== 'chat' && !['scorecard','search','finance','gbp','rescue'].includes(mainView) && (
                     <select className="range-picker" value={dateRange} onChange={e=>setDateRange(e.target.value)}>
                       {Object.entries(DATE_RANGES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                     </select>
@@ -3437,7 +3751,7 @@ function AppInner() {
                 {!isMobile && (
                 <div className="left-col-hdr">
                   <DataHealthBanner variant="inline" liveStats={liveStats} statsLoading={statsLoading}/>
-                  {!['scorecard','search','finance','gbp'].includes(mainView) && (
+                  {!['scorecard','search','finance','gbp','rescue'].includes(mainView) && (
                     <select className="range-picker" value={dateRange} onChange={e=>setDateRange(e.target.value)}>
                       {Object.entries(DATE_RANGES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                     </select>
@@ -3451,6 +3765,9 @@ function AppInner() {
                 {/* DASHBOARD VIEW */}
                 <div className="dash-col" style={{display: mainView === 'dashboard' ? undefined : 'none'}}>
                 <div className="dash-scroll" key={dateRange}>
+
+                  {/* Top priorities today — Revenue Rescue feed */}
+                  {perms.rescue && <RescueMiniWidget email={currentUser?.email} onNav={() => setMainView('rescue')} variant="today"/>}
 
                   {/* Metric cards — grouped: Marketing · Sales · Customers */}
                   {visibleTiles.length > 0 && (() => {
@@ -3522,12 +3839,17 @@ function AppInner() {
 
                 {/* PIPELINE VIEW */}
                 <div className="goals-col" style={{display: mainView === 'pipeline' ? undefined : 'none'}}>
-                  <PipelineView key={dateRange} liveStats={liveStats} statsLoading={statsLoading} dateRange={dateRange} sendMessage={sendMessage}/>
+                  <PipelineView key={dateRange} liveStats={liveStats} statsLoading={statsLoading} dateRange={dateRange} sendMessage={sendMessage} currentUserEmail={currentUser?.email} onNav={perms.rescue ? () => setMainView('rescue') : null}/>
+                </div>
+
+                {/* REVENUE RESCUE VIEW */}
+                <div className="goals-col" style={{display: mainView === 'rescue' ? undefined : 'none'}}>
+                  {mainView === 'rescue' && <RevenueRescueView liveStats={liveStats} sendMessage={sendMessage} currentUser={currentUser} perms={perms}/>}
                 </div>
 
                 {/* SCORECARD VIEW */}
                 <div className="goals-col" style={{display: mainView === 'scorecard' ? undefined : 'none'}}>
-                  {mainView === 'scorecard' && <ScorecardView key={dateRange} liveStats={liveStats} dateRange={dateRange} sendMessage={sendMessage} currentUser={currentUser} perms={perms}/>}
+                  {mainView === 'scorecard' && <ScorecardView key={dateRange} liveStats={liveStats} dateRange={dateRange} sendMessage={sendMessage} currentUser={currentUser} perms={perms} onNav={perms.rescue ? () => setMainView('rescue') : null}/>}
                 </div>
 
                 {/* FINANCE VIEW */}

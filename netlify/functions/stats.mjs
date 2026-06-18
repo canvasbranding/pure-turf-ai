@@ -46,7 +46,46 @@ async function fetchHubSpotDeals(date_from) {
   return {
     sales:      computeDealMetrics(salesDeals, date_from, getStageName),
     commercial: computeDealMetrics(commDeals, date_from, getStageName),
+    sourceQuality: computeSourceQuality(salesDeals),
   };
+}
+
+// Lead-source QUALITY (not just volume): judge each source by what its deals actually do —
+// quote→close rate, avg deal value, revenue, revenue-per-quote — so we can tell cheap leads
+// from good customers. Deal-based (deals carry true_lead_source/Original Traffic Source);
+// ad cost (CPL/CPA) is joined later from stats.google where the source is paid. NOTE: deals
+// are created at estimate-sent time, so a "lead" here is really a QUOTE — labeled honestly.
+function computeSourceQuality(deals) {
+  const agg = {};
+  for (const d of deals) {
+    const p = d.properties;
+    const stage = p.dealstage;
+    const { source } = leadSourceOf(p);
+    if (source === 'Unknown') continue;
+    const a = agg[source] || (agg[source] = { source, quotes: 0, closedWon: 0, closedLost: 0, open: 0, revenue: 0 });
+    a.quotes++;
+    if (DEAL_STAGES_WON.includes(stage)) { a.closedWon++; a.revenue += parseFloat(p.amount) || 0; }
+    else if (DEAL_STAGES_LOST.includes(stage)) a.closedLost++;
+    else a.open++;
+  }
+  return Object.values(agg)
+    .filter(a => a.quotes >= 5) // ignore tiny-sample noise
+    .map(a => {
+      const decided = a.closedWon + a.closedLost;
+      return {
+        source: a.source,
+        quotes: a.quotes,
+        closedWon: a.closedWon,
+        closedLost: a.closedLost,
+        open: a.open,
+        closeRate: decided > 0 ? Math.round((a.closedWon / decided) * 100) : null,
+        revenue: Math.round(a.revenue),
+        avgDealValue: a.closedWon > 0 ? Math.round(a.revenue / a.closedWon) : null,
+        revenuePerQuote: a.quotes > 0 ? Math.round(a.revenue / a.quotes) : 0,
+        cost: null, cpl: null, cpa: null, // joined for paid sources in assembly
+      };
+    })
+    .sort((x, y) => y.revenue - x.revenue);
 }
 
 // Lead-source breakdown computed from CONTACTS (not deals), so it can read the Aircall
@@ -384,6 +423,17 @@ export const handler = async (event) => {
     stats.pipeline = { total: s.total, sub: 'open + closed (all years)', dir: '' };
     stats.hubspot  = { total: s.total, newLeads: s.newLeads, activeLeads: s.activeLeads, revenue: s.revenue, closeRate: s.closeRate, wonCount: s.wonCount, lostCount: s.lostCount, openValue: s.openValue, stageBreakdown: s.stageBreakdown, repLeaderboard: s.repLeaderboard, recentDeals: s.recentDeals, leadSources: s.leadSources, taggedLeads: s.taggedLeads, attributedLeads: s.attributedLeads, createdTrend: s.createdTrend };
     stats.hubspotCommercial = { total: c.total, newLeads: c.newLeads, activeLeads: c.activeLeads, revenue: c.revenue, closeRate: c.closeRate, wonCount: c.wonCount, lostCount: c.lostCount, stageBreakdown: c.stageBreakdown, repLeaderboard: c.repLeaderboard, recentDeals: c.recentDeals, leadSources: c.leadSources, taggedLeads: c.taggedLeads, attributedLeads: c.attributedLeads, createdTrend: c.createdTrend };
+    stats.sourceQuality = hubspotResult.value.sourceQuality || [];
+    // Join paid-media cost so the "Google Ads" bucket shows CPL/CPA, not just revenue.
+    // Spend is range-scoped; deal outcomes are all-time, so treat CPL/CPA as directional.
+    const gSpend = stats.google?.spend || 0;
+    stats.sourceQuality.forEach(sq => {
+      if (sq.source === 'Google Ads' && gSpend > 0) {
+        sq.cost = gSpend;
+        sq.cpl = sq.quotes > 0 ? Math.round(gSpend / sq.quotes) : null;
+        sq.cpa = sq.closedWon > 0 ? Math.round(gSpend / sq.closedWon) : null;
+      }
+    });
   } else { stats.errors.hubspot = hubspotResult.reason?.message; }
 
   // ── Lead sources (contact-level, Aircall-aware) ─────────────
