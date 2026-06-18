@@ -520,7 +520,7 @@ function KPIsSection({ liveStats, statsLoading, rangeLabel, sendMessage }) {
         <div className="kpi-group-label">Sales Pipeline · {rangeLabel}</div>
         <div className="kpi-grid">
           <KpiCard loading={statsLoading} label="Total Leads" value={fmtN(totalLeads)} sub={leadsLabel} onClick={() => sendMessage(`How many leads came in this period and where are they in the pipeline?`)}/>
-          <KpiCard loading={statsLoading} label="Close Rate" value={closeRate !== null ? `${closeRate}%` : '–'} sub={`${fmtN(wonCount)} won · ${fmtN(lostCount)} lost this period`} onClick={() => sendMessage(`What is our close rate this period and which reps are performing best?`)}/>
+          <KpiCard loading={statsLoading} label="Close Rate" value={closeRate !== null ? `${closeRate}%` : '–'} sub={h?.closeRateBase ? `${fmtN(h.closeRateWon)} of ${fmtN(h.closeRateBase)} estimates closed` : 'estimate conversion'} onClick={() => sendMessage(`What is our close rate (estimate→customer, excluding auto-renewals) and which reps are performing best?`)}/>
           <KpiCard loading={statsLoading} label="Cost to Acquire" value={fmtD(costPerCust)} sub="Google spend ÷ won deals" onClick={() => sendMessage(`What is our customer acquisition cost this period?`)}/>
           <KpiCard loading={statsLoading} label="Google CPA" value={cpa ? `$${cpa}` : '–'} sub="cost per conversion"/>
         </div>
@@ -1189,7 +1189,7 @@ function PipelineView({ liveStats, statsLoading, dateRange, sendMessage, current
         {[
           { label:'Total Deals',   val: h?.total ?? '–',  sub: 'in CRM' },
           { label:'New Leads',     val: (h?.newLeads > 0 ? h.newLeads : h?.activeLeads) ?? '–', sub: h?.newLeads > 0 ? 'new this period' : 'active in pipeline' },
-          { label:'Close Rate',    val: h?.closeRate != null ? `${h.closeRate}%` : '–', sub: `${h?.wonCount ?? 0}W / ${h?.lostCount ?? 0}L closed` },
+          { label:'Close Rate',    val: h?.closeRate != null ? `${h.closeRate}%` : '–', sub: h?.closeRateBase ? `${h.closeRateWon} of ${h.closeRateBase} worked estimates` : 'estimate conversion' },
           { label:'Revenue',       val: h?.revenue ? fmt$(h.revenue) : '–', sub: 'closed won' },
         ].map(k => (
           <div key={k.label} className="dv-kpi-card">
