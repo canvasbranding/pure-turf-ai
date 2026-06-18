@@ -2243,6 +2243,8 @@ function RevenueRescueView({ liveStats, sendMessage, currentUser, perms }) {
   const [drawer, setDrawer] = useState(null);
   const [repFilter, setRepFilter] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [limit, setLimit] = useState(30);
+  useEffect(() => { setLimit(30); }, [repFilter]);
 
   const load = useCallback(() => {
     if (!email) return;
@@ -2348,14 +2350,22 @@ function RevenueRescueView({ liveStats, sendMessage, currentUser, perms }) {
       {/* Queue */}
       <div className="dv-section-label" style={{marginTop:18}}>
         {isManager ? (repFilter ? `${repFilter.split(' ')[0]}'s Rescue Queue` : 'Team Rescue Queue') : 'My Rescue Queue'}
-        <span className="dv-section-note">{shown.length} item{shown.length === 1 ? '' : 's'}{repFilter ? ' · ' : ''}{repFilter && <button className="rq-clear" onClick={() => setRepFilter(null)}>clear</button>}</span>
+        <span className="dv-section-note">
+          {shown.length > limit ? `top ${limit} of ${shown.length}` : `${shown.length} item${shown.length === 1 ? '' : 's'}`} · highest priority first
+          {repFilter && <> · <button className="rq-clear" onClick={() => setRepFilter(null)}>clear</button></>}
+        </span>
       </div>
       {loading ? (
         <div className="dv-loading-rows">{[1,2,3].map(i => <div key={i} className="dv-row-skel"/>)}</div>
       ) : shown.length > 0 ? (
-        <div className="rq-list">
-          {shown.map(item => <RescueCard key={item.dealId} item={item} onOpen={setDrawer} onAct={act} busy={busyId === item.dealId}/>)}
-        </div>
+        <>
+          <div className="rq-list">
+            {shown.slice(0, limit).map(item => <RescueCard key={item.dealId} item={item} onOpen={setDrawer} onAct={act} busy={busyId === item.dealId}/>)}
+          </div>
+          {shown.length > limit && (
+            <button className="rq-showmore" onClick={() => setLimit(l => l + 30)}>Show 30 more ({shown.length - limit} left)</button>
+          )}
+        </>
       ) : (
         <div className="dv-empty">{data ? '🎉 Nothing needs rescuing right now — queue is clear.' : 'Loading…'}</div>
       )}
