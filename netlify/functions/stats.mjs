@@ -311,7 +311,23 @@ export const handler = async (event) => {
       sharePct:    spend > 0 ? Math.round(d.spend / spend * 100) : 0,
     })).sort((a, b) => b.spend - a.spend);
 
-    stats.google = { spend: Math.round(spend), conversions: Math.round(convs), clicks: Math.round(clicks), impressions: Math.round(impressions), cpa, cpc, ctr, campaigns, sub: convs > 0 ? `↑ ${Math.round(convs)} conv · $${cpa} CPA` : `$${Math.round(spend).toLocaleString()} spend`, dir: 'up' };
+    // Daily trend (spend + conversions) — for the Google Ads chart. Shows the ramp-down
+    // into the intentional pause.
+    const dayMap = {};
+    rows.forEach(r => {
+      if (!r.date) return;
+      const day = r.date.slice(0, 10);
+      if (!dayMap[day]) dayMap[day] = { spend: 0, conversions: 0, clicks: 0 };
+      dayMap[day].spend       += parseFloat(r.spend) || parseFloat(r.cost) || 0;
+      dayMap[day].conversions += parseFloat(r.conversions) || 0;
+      dayMap[day].clicks      += parseFloat(r.clicks) || 0;
+    });
+    const trend = Object.entries(dayMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-90)
+      .map(([date, dd]) => ({ date, spend: Math.round(dd.spend), conversions: Math.round(dd.conversions), clicks: Math.round(dd.clicks) }));
+
+    stats.google = { spend: Math.round(spend), conversions: Math.round(convs), clicks: Math.round(clicks), impressions: Math.round(impressions), cpa, cpc, ctr, campaigns, trend, sub: convs > 0 ? `↑ ${Math.round(convs)} conv · $${cpa} CPA` : `$${Math.round(spend).toLocaleString()} spend`, dir: 'up' };
   } else { stats.errors.google = googleResult.reason?.message; }
 
   // ── Meta Ads — DISABLED (Windsor slot reallocated to QuickBooks) ──────────

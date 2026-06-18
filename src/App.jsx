@@ -867,6 +867,9 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
           { label:'Conversions', val: d ? fmtN(d.conversions) : '–', sub: 'total' },
           { label:'CPA',         val: d?.cpa ? `$${d.cpa}` : '–',    sub: 'cost/conv' },
           { label:'Clicks',      val: d ? fmtN(d.clicks) : '–',      sub: `${d?.ctr ?? '–'}% CTR` },
+          { label:'Impressions', val: d ? fmtN(d.impressions) : '–', sub: 'served' },
+          { label:'Avg CPC',     val: d?.cpc ? `$${d.cpc}` : '–',    sub: 'cost/click' },
+          { label:'Conv Rate',   val: d && d.clicks > 0 ? `${(d.conversions/d.clicks*100).toFixed(1)}%` : '–', sub: 'conv ÷ clicks' },
         ].map(k => (
           <div key={k.label} className="dv-kpi-card">
             <div className="dv-kpi-label">{k.label}</div>
@@ -875,6 +878,22 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
           </div>
         ))}
       </div>
+
+      {/* Spend & conversions trend */}
+      {d?.trend?.length > 1 && (
+        <>
+          <div className="dv-section-label" style={{marginTop:6}}>
+            Spend &amp; Conversions
+            <span className="dv-section-note" style={{opacity:1}}><span style={{color:'var(--accent,#5E6AD2)'}}>● Spend</span>&nbsp;&nbsp;<span style={{color:'#10B981'}}>┄ Conversions</span></span>
+          </div>
+          <TrendChart
+            data={d.trend.map(t => t.spend)}
+            secondary={d.trend.map(t => t.conversions)}
+            valueFmt={v => v >= 1000 ? `$${(v/1000).toFixed(1)}k` : `$${Math.round(v)}`}
+            labels={[d.trend[0].date.slice(5), d.trend[Math.floor(d.trend.length/2)].date.slice(5), d.trend[d.trend.length-1].date.slice(5)]}
+          />
+        </>
+      )}
 
       {/* Campaign breakdown */}
       <div className="dv-section-label">By Campaign</div>
