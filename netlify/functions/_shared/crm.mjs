@@ -48,8 +48,10 @@ export const NON_SALES_STAFF = new Set([
   '81693514', // Kurt Dryden (VP Finance / sales manager — not a residential rep)
 ]);
 
-// Campaign name fragments excluded from ad totals (mosquito line of business).
-export const EXCLUDED_CAMPAIGNS = ['mosquito', 'pmax - mosquito', 'pmax mosquito'];
+// Campaign name fragments excluded from ad totals. Mosquito is now an active line of
+// business (David, 2026-06), so it's INCLUDED — blended into the Google Ads spend,
+// conversions, CPA, and campaign breakdown. Add fragments here only for test/junk campaigns.
+export const EXCLUDED_CAMPAIGNS = [];
 
 // HubSpot Original Traffic Source (hs_analytics_source) enum → friendly label.
 export const HS_SOURCE_LABELS = {
