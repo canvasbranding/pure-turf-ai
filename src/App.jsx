@@ -2345,6 +2345,9 @@ function RevenueRescueView({ liveStats, sendMessage, currentUser, perms }) {
               </div>
             ))}
           </div>
+          <div className="rq-src-caveat">
+            ⚠ <strong>Deal-level attribution — Google is understated.</strong> Deals are created at estimate time with no web session, so most phone leads land in “Phone / Offline.” At the contact level (Aircall tracking numbers), <strong>59% of leads dial a Google Business Profile line</strong> — so the bulk of “Phone / Offline” revenue is really Google. The “Google Ads” row is paid-search PPC only.
+          </div>
         </>
       )}
 
