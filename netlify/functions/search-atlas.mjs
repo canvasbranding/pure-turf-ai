@@ -114,14 +114,16 @@ export default async (req) => {
 
   // ── TEMP probe: find the per-keyword rankings REST endpoint ──────────────
   if (req.url && req.url.includes('probe=1')) {
+    const SH = 'a2674f92-fc41-41bf-81ad-70090267b775';
     const cands = [
-      `${HOST.keyword}/api/v1/rank-tracker/?project_id=78504&page_size=10`,
-      `${HOST.keyword}/api/v1/rank-tracker/keywords/?project_id=78504&page_size=10`,
-      `${HOST.keyword}/api/v1/rank-tracker/78504/keywords/?page_size=10`,
-      `${HOST.keyword}/api/v1/rank-tracker/rankings/?project_id=78504&page_size=10`,
-      `${HOST.keyword}/api/v1/rank-tracker/keyword-rankings/?project_id=78504&page_size=10`,
-      `${HOST.keyword}/api/v1/rank-tracker/78504/rankings/?page_size=10`,
-      `${HOST.keyword}/api/v1/rank-tracker/projects/78504/keywords/?page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/keyword/?project_id=78504&page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/keyword-positions/?project_id=78504&page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/serps/?project_id=78504&page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/public/${SH}/`,
+      `${HOST.keyword}/api/v1/rank-tracker/shared/${SH}/`,
+      `${HOST.keyword}/api/v1/rank-tracker/share/${SH}/keywords/`,
+      `https://api.searchatlas.com/api/v1/rank-tracker/keywords/?project_id=78504&page_size=10`,
+      `${HOST.keyword}/api/v1/rank-tracker/?project_id=78504&fields=keywords&page_size=10`,
     ];
     const probe = [];
     for (const u of cands) {
