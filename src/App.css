@@ -1091,8 +1091,10 @@ html[data-theme="dark"] .goal-card { background:rgba(255,255,255,0.04); }
   display:flex; align-items:center; gap:4px; margin-bottom:20px;
   background:var(--surface); border:1px solid var(--border);
   border-radius:10px; padding:4px;
-  /* overflow-y:hidden is required: overflow-x:auto implies y:auto, which on iOS Safari
-     collapses this flex-item's height to a thin line. align-items keeps buttons natural-height. */
+  /* width:100% + flex-shrink:0 are the iOS Safari fix: a flex item with overflow inside a
+     flex column fails to stretch and collapses to min-width:0 (a thin sliver). Forcing the
+     width makes it fill its parent; overflow-y:hidden stops the implied y:auto height collapse. */
+  width:100%; box-sizing:border-box; flex-shrink:0;
   overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:none;
 }
 .admin-tabs::-webkit-scrollbar { display:none; }
