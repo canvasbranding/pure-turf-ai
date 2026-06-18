@@ -171,7 +171,21 @@ function computeDealMetrics(deals, date_from, getStageName) {
   const taggedLeads = manualTagged;             // leads a rep hand-tagged
   const attributedLeads = attributed;           // leads with ANY source (manual or auto)
 
-  return { total: deals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads, attributedLeads };
+  // Deals created per month — a growth curve for the pipeline view (period-independent
+  // so it always reads as momentum over time, not just the selected window).
+  const createdByMonth = {};
+  deals.forEach(d => {
+    const cd = d.properties.createdate;
+    if (!cd) return;
+    const m = cd.slice(0, 7); // YYYY-MM
+    createdByMonth[m] = (createdByMonth[m] || 0) + 1;
+  });
+  const createdTrend = Object.entries(createdByMonth)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-8)
+    .map(([month, count]) => ({ month, count }));
+
+  return { total: deals.length, newLeads, activeLeads, revenue: Math.round(revenue), closeRate, wonCount, lostCount, openCount, stageBreakdown, repLeaderboard, recentDeals, leadSources, taggedLeads, attributedLeads, createdTrend };
 }
 
 // In-memory result cache. Netlify reuses warm function instances, so this persists
@@ -292,8 +306,8 @@ export const handler = async (event) => {
     // Primary tile + dashboard = 2026 Sales (residential). Commercial is exposed
     // alongside so the Pipeline view can toggle to it.
     stats.pipeline = { total: s.total, sub: `deals · ${year}`, dir: '' };
-    stats.hubspot  = { total: s.total, newLeads: s.newLeads, activeLeads: s.activeLeads, revenue: s.revenue, closeRate: s.closeRate, wonCount: s.wonCount, lostCount: s.lostCount, stageBreakdown: s.stageBreakdown, repLeaderboard: s.repLeaderboard, recentDeals: s.recentDeals, leadSources: s.leadSources, taggedLeads: s.taggedLeads, attributedLeads: s.attributedLeads };
-    stats.hubspotCommercial = { total: c.total, newLeads: c.newLeads, activeLeads: c.activeLeads, revenue: c.revenue, closeRate: c.closeRate, wonCount: c.wonCount, lostCount: c.lostCount, stageBreakdown: c.stageBreakdown, repLeaderboard: c.repLeaderboard, recentDeals: c.recentDeals, leadSources: c.leadSources, taggedLeads: c.taggedLeads, attributedLeads: c.attributedLeads };
+    stats.hubspot  = { total: s.total, newLeads: s.newLeads, activeLeads: s.activeLeads, revenue: s.revenue, closeRate: s.closeRate, wonCount: s.wonCount, lostCount: s.lostCount, stageBreakdown: s.stageBreakdown, repLeaderboard: s.repLeaderboard, recentDeals: s.recentDeals, leadSources: s.leadSources, taggedLeads: s.taggedLeads, attributedLeads: s.attributedLeads, createdTrend: s.createdTrend };
+    stats.hubspotCommercial = { total: c.total, newLeads: c.newLeads, activeLeads: c.activeLeads, revenue: c.revenue, closeRate: c.closeRate, wonCount: c.wonCount, lostCount: c.lostCount, stageBreakdown: c.stageBreakdown, repLeaderboard: c.repLeaderboard, recentDeals: c.recentDeals, leadSources: c.leadSources, taggedLeads: c.taggedLeads, attributedLeads: c.attributedLeads, createdTrend: c.createdTrend };
   } else { stats.errors.hubspot = hubspotResult.reason?.message; }
 
   const googleSpend = stats.google?.spend || 0;
