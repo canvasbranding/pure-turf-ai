@@ -69,16 +69,18 @@ export const HS_SOURCE_LABELS = {
 // vocabularies ("Google PPC - Search" vs "Paid Search", "Organic Google" vs
 // "Organic Search"), which fragments Google across 6+ tiny categories. Collapsing
 // them lets Google read as the real driver it is. Order matters — most specific first.
+// GBP and LSA share the same numbers/accounts at Pure Turf (never split), so they
+// collapse to one "Google GBP + LSA" bucket. PPC is separate (dedicated numbers).
 const CHANNEL_RULES = [
-  [/lsa|ppc|paid.?search|google ?ads|adwords|\bsem\b/i, 'Google Ads'],
+  [/ppc|paid.?search|google ?ads|adwords|\bsem\b/i,     'Google PPC'],
+  [/\blsa\b|local service|business profile|\bgbp\b|\bgmb\b|google ?maps|\bmaps\b/i, 'Google GBP + LSA'],
   [/organic.?(google|search)|\bseo\b/i,                 'Organic Search'],
-  [/business profile|\bgbp\b|\bgmb\b|google ?maps|\bmaps\b/i, 'Google Business Profile'],
   [/direct.?mail|\bmail\b|postcard|\beddm\b/i,          'Direct Mail'],
   [/meta|facebook|instagram|\bfb\b|paid.?social/i,      'Paid Social'],
   [/social/i,                                           'Organic Social'],
   [/referr|word.?of.?mouth|\bwom\b/i,                   'Referral'],
   [/email/i,                                            'Email'],
-  [/yard ?sign|truck|door|flyer|signage/i,             'Field / Signage'],
+  [/yard ?sign|lawn ?sign|truck|door|flyer|signage/i,  'Yard Signs'],
   [/other.?campaign/i,                                  'Other Campaign'],
   [/offline|manual/i,                                   'Phone / Offline'],
   [/direct.?traffic|^direct$|typed/i,                   'Website / Direct'],
@@ -96,19 +98,43 @@ function isRealTag(s) {
   return v.length > 1 && !/^\d+$/.test(v);
 }
 
-// Aircall tracking-number → lead source. Pure Turf advertises a different phone number
-// per channel, so the dialed number (CONTACT.last_used_aircall_phone_number) is the
-// truest signal of where a PHONE lead came from — and ~78% of tracked calls hit a Google
-// Business Profile number. These calls are invisible to hs_analytics_source (it's web-
-// session only and logs every call as OFFLINE), so this map is what surfaces Google's
-// real weight. Extend it as numbers are added/retired — no other code change needed.
+// Aircall tracking-number → lead source. Pure Turf runs a different phone number per
+// channel, so the dialed number (CONTACT.last_used_aircall_phone_number) is the truest
+// signal of where a PHONE lead came from. These calls are invisible to hs_analytics_source
+// (web-session only — every call logs as OFFLINE), so this map is what surfaces the real mix.
+// Source of truth: the Aircall Numbers dashboard (21 numbers). Extend as numbers change —
+// no other code change needed.
+//
+// KEY NUANCE (confirmed by David, 2026-06): the 4 metro "local" numbers each serve as BOTH
+// that location's Google Business Profile number AND its Local Services Ads number — GBP and
+// LSA were never split, so a call on these can't be attributed to GBP vs LSA. They bucket to
+// the combined "Google GBP + LSA". PPC, by contrast, has 4 dedicated per-campaign numbers, so
+// PPC calls ARE cleanly separable. The standalone "LSA [City]" numbers in Aircall are unused.
 export const PHONE_SOURCE_MAP = {
-  '+16157851849': 'Google Business Profile', // Nashville / 445 Atlas Dr
-  '+16156568772': 'Google Business Profile', // Brentwood / 5301 Virginia Way
-  '+16294010924': 'Google Business Profile', // Murfreesboro / 1354 W College
-  '+16152825118': 'Google Business Profile', // Franklin / 100 Confederate Dr
-  // Direct-mail + (future) LSA-split numbers go here as they're confirmed, e.g.:
-  // '+16158806451': 'Direct Mail',
+  // ── Google PPC (paid search) — dedicated per-campaign tracking numbers (active) ──
+  '+16155993226': 'Google PPC',        // PPC Campaign 1 (Search)
+  '+16152825083': 'Google PPC',        // PPC Campaign 2 (Branded)
+  '+16158806451': 'Google PPC',        // PPC Campaign 3 (PMax)
+  '+16158619024': 'Google PPC',        // PPC Campaign 4 (Mosquito)
+  // ── Google GBP + LSA — one shared number per metro (GBP listing == LSA line) ──
+  '+16157851849': 'Google GBP + LSA',  // Nashville / 445 Atlas Dr
+  '+16156568772': 'Google GBP + LSA',  // Brentwood
+  '+16294010924': 'Google GBP + LSA',  // Murfreesboro
+  '+16152825118': 'Google GBP + LSA',  // Franklin
+  // ── Direct Mail — per campaign/drop (some drops were never deployed) ──
+  '+16158612262': 'Direct Mail',       // Campaign 1 · Drop 1B [11x14]
+  '+16156148971': 'Direct Mail',       // Campaign 1 · Drop 3
+  '+16155386612': 'Direct Mail',       // Campaign 3 · Drop 2
+  '+16156567216': 'Direct Mail',       // Campaign 1 · Drop 1
+  '+16157160390': 'Direct Mail',       // Campaign 1 · Drop 2
+  '+16157161860': 'Direct Mail',       // Campaign 2 · Drop 1
+  '+16153877041': 'Direct Mail',       // Campaign 2 · Drop 2
+  '+16155446219': 'Direct Mail',       // Campaign 3 · Drop 1 [Welcome Neighbor]
+  // ── Other channels ──
+  '+16156160273': 'Yard Signs',        // Lawn Signs Number
+  '+16158231146': 'Paid Social',       // Meta Ads
+  // Unused (never deployed) split-LSA numbers, left unmapped on purpose:
+  //   +16157161055 LSA Brentwood · +16292076897 LSA Murfreesboro · +16158618089 LSA Nashville
 };
 
 // Lead source for a CONTACT, normalized to a clean channel bucket. Priority:
