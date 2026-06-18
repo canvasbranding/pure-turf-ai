@@ -337,9 +337,11 @@ html[data-theme="dark"] .snav-btn.active {
 .sc-prog-table .dv-col-main { min-width:104px; }
 
 .sc-rep-table { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-.sc-rep-table .dv-table-hdr, .sc-rep-table .dv-table-row { min-width:472px; }
+.sc-rep-table .dv-table-hdr, .sc-rep-table .dv-table-row { min-width:516px; }
+.sc-rep-table .dv-table-hdr { letter-spacing:0.03em; }
+.sc-rep-table .dv-table-hdr .dv-col-num, .sc-rep-table .dv-col-num { white-space:nowrap; }
 .sc-rep-table .dv-col-main { min-width:132px; }
-.sc-rep-table .dv-col-num { width:52px; }
+.sc-rep-table .dv-col-num { width:64px; padding-left:6px; }
 
 /* ── Goal tracking (Company / Finance / Sales) ── */
 .goal-track { display:flex; flex-direction:column; gap:24px; }
