@@ -6,7 +6,7 @@
 import { getStore } from '@netlify/blobs';
 import {
   ACTIVE_PIPELINES, PIPELINE_2026_SALES, PIPELINE_2026_COMMERCIAL,
-  DEAL_STAGES_WON, DEAL_STAGES_LOST, OWNER_NAMES, leadSourceOf, fetchDealsInPipelines,
+  DEAL_STAGES_WON, DEAL_STAGES_LOST, OWNER_NAMES, NON_SALES_STAFF, leadSourceOf, fetchDealsInPipelines,
 } from './_shared/crm.mjs';
 import { DEFAULT_WEIGHTS, OPEN_STAGES, scoreDeal, toRescueItem, parseDealName } from './_shared/rescue.mjs';
 import { makeItem, confidence, applyState, sortItems } from './_shared/operating.mjs';
@@ -90,7 +90,7 @@ export default async (req) => {
       const scored = scoreDeal(d, ctx, weights);
       if (scored.flags.length === 0 && scored.score < 6) continue;
       const r = toRescueItem(scored);
-      const R = byRep[scored.ownerName] || (byRep[scored.ownerName] = { name: scored.ownerName, count: 0, stale: 0, neverContacted: 0, atRisk: 0 });
+      const R = byRep[scored.ownerName] || (byRep[scored.ownerName] = { name: scored.ownerName, ownerId: p.hubspot_owner_id, count: 0, stale: 0, neverContacted: 0, atRisk: 0 });
       R.count++;
       if (scored.flags.includes('staleEstimate')) R.stale++;
       if (!scored.everTouched) R.neverContacted++;
@@ -123,6 +123,7 @@ export default async (req) => {
     } else {
       for (const x of salesScored.slice(0, 10)) items.push(indItem(x, 'manager')); // biggest deals to know about
       for (const R of Object.values(byRep)) {
+        if (NON_SALES_STAFF.has(R.ownerId)) continue; // only real sales reps get coaching rollups
         if (R.stale + R.neverContacted === 0) continue;
         items.push(makeItem({
           id: `coach:${R.name.replace(/\s+/g, '')}`,
