@@ -310,11 +310,12 @@ const ALL_TILES = [
   // re-adding this tile + the facebook_ads fetch in stats.mjs once Meta is reconnected.
   // { key:'meta', lbl:'Meta Ads', val:1205, prefix:'$', sub:'↓ $484 CPA', dir:'dn', perm:'metaAds', group:'Marketing' },
   { key:'gbp',       lbl:'GBP Impressions', val:2841, prefix:'',  sub:'↑ 47 calls this week',  dir:'up', perm:'gbp',       group:'Marketing' },
-  { key:'pipeline',  lbl:'Pipeline',     val:1617, prefix:'',  sub:'deals · 2026',           dir:'',   perm:'pipeline',  group:'Sales' },
-  // Business-outcome tiles — the funnel from leads → closes → customers → revenue.
+  // Business-outcome tiles — lead with the funnel (leads → closes → revenue); total
+  // deal count is context, so it sits last in the Sales group.
   { key:'leads',      lbl:'New Leads',      val:0, prefix:'',  sub:'new this period',   dir:'up', perm:'pipeline', group:'Sales' },
   { key:'closeRate',  lbl:'Close Rate',     val:0, prefix:'',  suffix:'%', sub:'won vs lost', dir:'', perm:'pipeline', group:'Sales' },
   { key:'revenue',    lbl:'Revenue',        val:0, prefix:'$', sub:'closed won',        dir:'up', perm:'pipeline', group:'Sales' },
+  { key:'pipeline',  lbl:'Total Deals',  val:1617, prefix:'',  sub:'open + closed · 2026',   dir:'',   perm:'pipeline',  group:'Sales' },
   { key:'newCustomers',lbl:'Programs Sold', val:0, prefix:'',  sub:'sold this period', dir:'up', perm:'pipeline', group:'Customers' },
   { key:'activeCustomers',lbl:'Active Programs', val:0, prefix:'', sub:'active service book', dir:'', perm:'pipeline', group:'Customers' },
   { key:'estCustomers',lbl:'Customers (est.)', val:0, prefix:'~', sub:'unique active accounts', dir:'', perm:'pipeline', group:'Customers' },
@@ -702,7 +703,10 @@ function GoalTrackingView({ orgGoals, perms, sendMessage }) {
   const visible = GOAL_AREAS.filter(a => a.key !== 'finance' || perms?.finance || perms?.financeGoals);
   const fmtVal = (format, v) => {
     if (v == null) return '–';
-    if (format === 'currency') return v >= 1000 ? `$${Math.round(v/1000).toLocaleString()}k` : `$${Math.round(v)}`;
+    if (format === 'currency') {
+      const neg = v < 0, a = Math.abs(v);
+      return (neg ? '-' : '') + (a >= 1000 ? `$${Math.round(a/1000).toLocaleString()}k` : `$${Math.round(a)}`);
+    }
     if (format === 'percent') return `${Math.round(v)}%`;
     return Math.round(v).toLocaleString();
   };
