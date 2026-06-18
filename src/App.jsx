@@ -914,6 +914,7 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
           <TrendChart
             data={d.trend.map(t => t.spend)}
             secondary={d.trend.map(t => t.conversions)}
+            dualAxis
             valueFmt={v => v >= 1000 ? `$${(v/1000).toFixed(1)}k` : `$${Math.round(v)}`}
             labels={[d.trend[0].date.slice(5), d.trend[Math.floor(d.trend.length/2)].date.slice(5), d.trend[d.trend.length-1].date.slice(5)]}
           />
@@ -960,18 +961,28 @@ function GoogleAdsView({ liveStats, statsLoading, dateRange, sendMessage }) {
 }
 
 // Smooth SVG area+line trend chart. `data` = numbers; optional `secondary` = second line.
-function TrendChart({ data, secondary, height = 110, color = '#5E6AD2', color2 = '#10B981', labels, valueFmt }) {
+function TrendChart({ data, secondary, height = 110, color = '#5E6AD2', color2 = '#10B981', labels, valueFmt, dualAxis = false }) {
   const a = (data || []).map(Number).filter(v => Number.isFinite(v));
   if (a.length < 2) return null;
   const b = secondary && secondary.length === a.length ? secondary.map(Number) : null;
-  const all = b ? a.concat(b.filter(Number.isFinite)) : a;
-  const max = Math.max(...all), min = Math.min(...all), range = (max - min) || 1;
+  // dualAxis: scale the secondary line to its OWN range (use when the two series are in
+  // different units, e.g. spend in $thousands vs conversions in tens — otherwise the small
+  // series flatlines against the big one's axis).
+  const dual = dualAxis && b;
+  const prim = dual ? a : (b ? a.concat(b.filter(Number.isFinite)) : a);
+  const max = Math.max(...prim), min = Math.min(...prim), range = (max - min) || 1;
   const W = 320, H = 110, pad = 10;
   const X = i => pad + (i / (a.length - 1)) * (W - pad * 2);
   const Y = v => H - pad - ((v - min) / range) * (H - pad * 2);
+  let Yb = Y;
+  if (dual) {
+    const bv = b.filter(Number.isFinite);
+    const bMin = Math.min(...bv), bMax = Math.max(...bv), bRange = (bMax - bMin) || 1;
+    Yb = v => H - pad - ((v - bMin) / bRange) * (H - pad * 2);
+  }
   // Smooth path via Catmull-Rom → cubic bezier.
-  const smooth = arr => {
-    const p = arr.map((v, i) => [X(i), Y(v)]);
+  const smooth = (arr, yFn = Y) => {
+    const p = arr.map((v, i) => [X(i), yFn(v)]);
     let d = `M ${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;
     for (let i = 0; i < p.length - 1; i++) {
       const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2;
@@ -999,7 +1010,7 @@ function TrendChart({ data, secondary, height = 110, color = '#5E6AD2', color2 =
           </linearGradient>
         </defs>
         <path d={area} fill={`url(#${gid})`} />
-        {b && <path d={smooth(b)} fill="none" stroke={color2} strokeWidth="1.5" strokeOpacity="0.75" vectorEffect="non-scaling-stroke" strokeDasharray="4 3" strokeLinejoin="round" strokeLinecap="round" />}
+        {b && <path d={smooth(b, Yb)} fill="none" stroke={color2} strokeWidth="1.5" strokeOpacity="0.75" vectorEffect="non-scaling-stroke" strokeDasharray="4 3" strokeLinejoin="round" strokeLinecap="round" />}
         <path d={line} fill="none" stroke={color} strokeWidth="2.25" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
       </svg>
       {labels && <div className="trend-chart-labels">{labels.map((l, i) => <span key={i}>{l}</span>)}</div>}
@@ -2288,7 +2299,13 @@ function RevenueRescueView({ liveStats, sendMessage, currentUser, perms }) {
   const [repFilter, setRepFilter] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [limit, setLimit] = useState(30);
-  useEffect(() => { setLimit(30); }, [repFilter]);
+  const queueRef = useRef(null);
+  useEffect(() => {
+    setLimit(30);
+    // Filtering by rep changes the queue lower down the page — scroll to it so the click
+    // visibly does something instead of silently filtering off-screen.
+    if (repFilter && queueRef.current) queueRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [repFilter]);
 
   const load = useCallback(() => {
     if (!email) return;
@@ -2395,7 +2412,7 @@ function RevenueRescueView({ liveStats, sendMessage, currentUser, perms }) {
       )}
 
       {/* Queue */}
-      <div className="dv-section-label" style={{marginTop:18}}>
+      <div ref={queueRef} className="dv-section-label" style={{marginTop:18, scrollMarginTop:8}}>
         {isManager ? (repFilter ? `${repFilter.split(' ')[0]}'s Rescue Queue` : 'Team Rescue Queue') : 'My Rescue Queue'}
         <span className="dv-section-note">
           {shown.length > limit ? `top ${limit} of ${shown.length}` : `${shown.length} item${shown.length === 1 ? '' : 's'}`} · highest priority first
