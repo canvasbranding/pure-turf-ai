@@ -802,7 +802,7 @@ html[data-theme="light"] .skel::after { background:linear-gradient(90deg,transpa
   }
   .mobile-header-title { font-family:var(--font); font-size:17px; font-weight:700; color:var(--text); letter-spacing:-0.01em; }
   .mobile-header-right { display:flex; align-items:center; gap:8px; }
-  .mobile-header .range-picker { font-size:12px; padding:6px 10px; min-height:34px; border-radius:8px; }
+  .mobile-header .range-picker { font-size:12px; padding:6px 26px 6px 10px; min-height:34px; border-radius:8px; }
   .theme-toggle-mobile { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--border); border:none; cursor:pointer; color:var(--text); -webkit-tap-highlight-color:transparent; }
   .user-badge-mobile { width:30px; height:30px; border-radius:50%; background:var(--accent); color:white; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; font-family:var(--font); border:none; cursor:pointer; -webkit-tap-highlight-color:transparent; }
 
@@ -1755,3 +1755,15 @@ html[data-theme="dark"] .kpi-reason-list { background:rgba(255,255,255,0.04); }
 .rq-ai-label:first-child { margin-top:4px; }
 .rq-email-subj { display:flex; align-items:baseline; gap:8px; padding:8px 11px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; color:var(--text); }
 .rq-email-subj span { flex:0 0 auto; font-size:9.5px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-3); }
+
+/* Mobile account menu (initials → menu instead of instant sign-out) */
+.user-menu-wrap { position:relative; }
+.user-menu-backdrop { position:fixed; inset:0; z-index:40; }
+.user-menu { position:absolute; top:calc(100% + 8px); right:0; z-index:41; min-width:170px;
+  background:var(--card); border:1px solid var(--border-md); border-radius:var(--r-sm);
+  box-shadow:var(--shadow-lg); padding:6px; display:flex; flex-direction:column; gap:2px; }
+.user-menu-name { padding:7px 10px 9px; font-size:13px; font-weight:600; color:var(--text); display:flex; flex-direction:column; gap:1px; border-bottom:1px solid var(--border); margin-bottom:4px; }
+.user-menu-name span { font-size:11px; font-weight:400; color:var(--text-3); }
+.user-menu button { display:flex; align-items:center; gap:9px; width:100%; text-align:left; font-family:var(--font); font-size:13px; font-weight:500; color:var(--text); background:none; border:none; border-radius:8px; padding:9px 10px; cursor:pointer; }
+.user-menu button:hover { background:var(--surface); }
+.user-menu .user-menu-out { color:var(--red); }

@@ -463,12 +463,23 @@ function KPIsSection({ liveStats, statsLoading, rangeLabel, sendMessage }) {
   return (
     <div className="kpi-sections">
 
+      {/* Sales */}
+      <div className="kpi-group">
+        <div className="kpi-group-label">Sales · {rangeLabel}</div>
+        <div className="kpi-grid">
+          <KpiCard loading={statsLoading} label="Close Rate" value={closeRate !== null ? `${closeRate}%` : '–'} sub={h?.closeRateBase ? `${h.closeRateWon} of ${h.closeRateBase} estimates` : 'estimate conversion'} onClick={() => sendMessage(`What's our close rate (estimate→customer) and which reps are best?`)}/>
+          <KpiCard loading={statsLoading} label="Revenue" value={fmtD(h?.revenue ?? null)} sub="closed won this period" onClick={() => sendMessage(`What's our closed-won revenue ${rangeLabel}?`)}/>
+          <KpiCard loading={statsLoading} label="Deals Won" value={fmtN(wonCount)} sub={`${fmtN(lostCount)} lost`} onClick={() => sendMessage(`How many deals did we win vs lose ${rangeLabel}?`)}/>
+          <KpiCard loading={statsLoading} label="Leads" value={fmtN(totalLeads)} sub={leadsLabel} onClick={() => sendMessage(`How many leads ${rangeLabel} and where did they come from?`)}/>
+        </div>
+      </div>
+
       {/* Customers */}
       <div className="kpi-group">
         <div className="kpi-group-label">Customers · {rangeLabel}</div>
         <div className="kpi-grid">
-          <KpiCard loading={statsLoading} label="Active Programs" value={fmtN(totalActive)} sub="active service records" onClick={() => sendMessage(`How many active programs (service records) do we have, and roughly how many unique customers is that?`)}/>
           <KpiCard loading={statsLoading} label="Programs Sold" value={fmtN(newCustomers)} sub="sold this period (incl. renewals)" onClick={() => sendMessage(`How many programs were sold ${rangeLabel} — and how many are brand-new customers vs renewals?`)}/>
+          <KpiCard loading={statsLoading} label="Net Change" value={(newCustomers != null && newCancels != null) ? fmtN(newCustomers - newCancels) : '–'} sub="sold − cancels" status={(newCustomers != null && newCancels != null && (newCustomers - newCancels) < 0) ? 'warn' : null} onClick={() => sendMessage(`What's our net program change (sold minus cancels) ${rangeLabel}?`)}/>
           <KpiCard loading={statsLoading} label="Cancels" value={fmtN(newCancels)} sub="this period" status={newCancels > 0 ? 'warn' : null} onClick={() => sendMessage(`How many customers cancelled this period and what were the reasons?`)}/>
           <KpiCard loading={statsLoading} label="Cancel Pending" value={fmtN(cancelPending)} sub="at risk" status={cancelPending > 5 ? 'warn' : null} onClick={() => sendMessage(`Who is cancel pending right now and what should we do?`)}/>
         </div>
@@ -3392,6 +3403,7 @@ function AppInner() {
   const isMobile = useMobile();
   const [mobileTab,     setMobileTab]     = useState('dashboard');
   const [moreOpen,      setMoreOpen]      = useState(false);
+  const [userMenu,      setUserMenu]      = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [loginStep,     setLoginStep]     = useState(() => {
     const saved = getSavedEmail();
@@ -4183,9 +4195,19 @@ function AppInner() {
                   <button className="theme-toggle-mobile" onClick={toggleTheme} aria-label="Toggle theme">
                     {theme === 'dark' ? <SunIcon/> : <MoonIcon/>}
                   </button>
-                  <button className="user-badge-mobile" onClick={signOut} aria-label="Sign out">
-                    {currentUser?.initials}
-                  </button>
+                  <div className="user-menu-wrap">
+                    <button className="user-badge-mobile" onClick={()=>setUserMenu(o=>!o)} aria-label="Account">
+                      {currentUser?.initials}
+                    </button>
+                    {userMenu && (<>
+                      <div className="user-menu-backdrop" onClick={()=>setUserMenu(false)}/>
+                      <div className="user-menu">
+                        <div className="user-menu-name">{currentUser?.name}<span>{currentUser?.title || currentUser?.role}</span></div>
+                        {perms.adminPanel && <button onClick={()=>{ setUserMenu(false); setScreen('admin'); }}><Icon name="admin" size={14}/> Admin</button>}
+                        <button className="user-menu-out" onClick={()=>{ setUserMenu(false); signOut(); }}><Icon name="signout" size={14}/> Sign out</button>
+                      </div>
+                    </>)}
+                  </div>
                 </div>
               </header>
             )}
@@ -4389,12 +4411,14 @@ function AppInner() {
                   <div className="more-sheet-title">Sections</div>
                   <div className="more-sheet-grid">
                     {[
+                      { view:'today',       icon:'today',    label:'Today',     show:perms.rescue },
+                      { view:'rescue',      icon:'rescue',   label:'Revenue Rescue', show:perms.rescue },
                       { view:'goals',       icon:'goals',    label:'Goals',     show:true },
+                      { view:'scorecard',   icon:'briefing', label:'Scorecard', show:perms.scorecard },
                       { view:'google-ads',  icon:'chart',    label:'Google Ads', show:perms.googleAds },
                       { view:'gbp',         icon:'gbp',      label:'GBP',       show:perms.gbp },
-                      { view:'finance',     icon:'finance',  label:'Finance',   show:perms.finance },
-                      { view:'scorecard',   icon:'briefing', label:'Scorecard', show:perms.scorecard },
                       { view:'search',      icon:'chart',    label:'Search & Visibility', show:perms.teamGoals },
+                      { view:'finance',     icon:'finance',  label:'Finance',   show:perms.finance },
                     ].filter(i=>i.show).map(i => (
                       <button key={i.view}
                         className={`more-sheet-item${mainView===i.view && mobileTab!=='chat'?' active':''}`}
@@ -4415,7 +4439,7 @@ function AppInner() {
 
             {/* MOBILE BOTTOM TAB BAR */}
             {isMobile && (() => {
-              const inMore = moreOpen || ['gbp','scorecard','search','finance','goals','google-ads'].includes(mainView) && mobileTab!=='chat';
+              const inMore = moreOpen || ['today','rescue','gbp','scorecard','search','finance','goals','google-ads'].includes(mainView) && mobileTab!=='chat';
               return (
             <nav className="bottom-tab-bar" role="tablist">
               <button className={`tab-item${mobileTab==='dashboard'&&!moreOpen?' active':''}`} onClick={()=>handleMobileTab('dashboard')} aria-label="Home">
