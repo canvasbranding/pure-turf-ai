@@ -1066,7 +1066,7 @@ function GBPView({ sendMessage }) {
 }
 
 // ══ PIPELINE VIEW ══════════════════════════════════════════════════════════
-function PipelineView({ liveStats, statsLoading, dateRange, sendMessage, onNav }) {
+function PipelineView({ liveStats, statsLoading, dateRange, sendMessage, currentUserEmail, onNav }) {
   const [pipeView, setPipeView] = useState('sales'); // 'sales' | 'commercial'
   const hasCommercial = !!liveStats?.hubspotCommercial;
   const h = pipeView === 'commercial' ? liveStats?.hubspotCommercial : liveStats?.hubspot;
