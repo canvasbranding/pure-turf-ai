@@ -43,6 +43,7 @@ const Icon = ({ name, size = 16 }) => {
     edit:     <><path d="M14.5 3.5l2 2L6 16H4v-2L14.5 3.5z" strokeLinejoin="round"/></>,
     check2:   <path d="M3.5 10l4.5 4.5 8.5-9" strokeLinecap="round" strokeLinejoin="round"/>,
     rescue:   <><circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="3"/><path d="M4.7 4.7l2.9 2.9M12.4 12.4l2.9 2.9M15.3 4.7l-2.9 2.9M7.6 12.4l-2.9 2.9" strokeLinecap="round"/></>,
+    today:    <path d="M11 2.5L4 11h5l-1 6.5L15 9h-5l1-6.5z" strokeLinejoin="round" strokeLinecap="round"/>,
     signout:  <path d="M12.5 6V4a1.5 1.5 0 00-1.5-1.5H5A1.5 1.5 0 003.5 4v12A1.5 1.5 0 005 17.5h6a1.5 1.5 0 001.5-1.5v-2M8 10h9.5M14 6.5L17.5 10 14 13.5" strokeLinecap="round" strokeLinejoin="round"/>,
   };
   return (
@@ -2567,6 +2568,198 @@ function RescueMiniWidget({ email, onNav, variant = 'banner' }) {
   );
 }
 
+// ── Operating Items (shared spine) ─────────────────────────────────────────────
+// Reusable components for the unified "what matters / why / action / impact" item that
+// powers Today (and, next, the briefing, decision center, meeting mode). Built to match
+// the existing design language and the Revenue Rescue card it generalizes.
+const OP_CAT = {
+  sales:{l:'Sales',c:'#4F82A0'}, goals:{l:'Goals',c:'#C8902E'}, marketing:{l:'Marketing',c:'#7C5CBF'},
+  finance:{l:'Finance',c:'#4E8A60'}, reputation:{l:'Reputation',c:'#C8463C'}, search_visibility:{l:'Search',c:'#10B981'},
+  pipeline:{l:'Pipeline',c:'#4F82A0'}, customer_service:{l:'Customers',c:'#D08A2E'}, operations:{l:'Ops',c:'#6E6C6A'}, leadership:{l:'Leadership',c:'#18171A'},
+};
+const OP_PRI = { critical:'op-pri-crit', high:'op-pri-high', medium:'op-pri-med', low:'op-pri-low' };
+const OP_TYPE_LBL = { priority:'Priority', risk:'Risk', opportunity:'Opportunity', action:'Action', decision_needed:'Decision', alert:'Alert', coaching_note:'Coaching', insight:'Insight', meeting_prep:'Meeting prep' };
+
+function PriorityBadge({ level }) { return <span className={`op-badge ${OP_PRI[level] || 'op-pri-low'}`}>{level}</span>; }
+function ImpactBadge({ label, value }) {
+  if (value == null && !label) return null;
+  return <span className="op-impact" title="Estimated impact">{value != null ? rqFmt$(value) : label}</span>;
+}
+function ConfidenceBadge({ confidence }) {
+  if (!confidence) return null;
+  const cls = confidence.level === 'High' ? 'op-conf-hi' : confidence.level === 'Low' ? 'op-conf-lo' : 'op-conf-md';
+  return <span className={`op-conf ${cls}`} title={(confidence.reasons || []).join(' · ')}>{confidence.level} confidence</span>;
+}
+function SourceTrail({ trail, confidence }) {
+  const [open, setOpen] = React.useState(false);
+  if (!trail) return null;
+  const syncAgo = trail.lastSync ? relTime(trail.lastSync) : null;
+  return (
+    <div className="op-src">
+      <button className="op-src-toggle" onClick={() => setOpen(o => !o)}>{open ? '▾' : '▸'} Sources &amp; confidence</button>
+      {open && (
+        <div className="op-src-body">
+          {trail.system && <div><span>Source</span>{trail.system}</div>}
+          {trail.dateRange && <div><span>Range</span>{trail.dateRange}</div>}
+          {syncAgo && <div><span>Synced</span>{syncAgo}</div>}
+          {trail.basis && <div><span>Basis</span>{trail.basis}</div>}
+          {trail.dataState && <div><span>Data</span><em className={`op-datastate op-ds-${trail.dataState}`}>{trail.dataState}</em></div>}
+          {confidence && <div><span>Confidence</span>{confidence.level}{confidence.reasons?.length ? ` — ${confidence.reasons.join(', ')}` : ''}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OperatingItemCard({ item, onOpen, onAct, busy }) {
+  const cat = OP_CAT[item.category] || { l: item.category, c: 'var(--text-3)' };
+  return (
+    <div className="op-card" onClick={() => onOpen(item)}>
+      <div className="op-card-top">
+        <PriorityBadge level={item.priorityLevel}/>
+        <span className="op-cat" style={{ color: cat.c }}>{cat.l} · {OP_TYPE_LBL[item.type] || item.type}</span>
+        <ImpactBadge label={item.impactLabel} value={item.estimatedImpact}/>
+      </div>
+      <div className="op-title">{item.title}</div>
+      {item.summary && <div className="op-summary">{item.summary}</div>}
+      {item.recommendedAction && <div className="op-action"><Icon name="arrowR" size={12}/> {item.recommendedAction}</div>}
+      <div className="op-btns" onClick={e => e.stopPropagation()}>
+        <button className="rq-btn rq-btn-primary" onClick={() => onOpen(item)}>Details</button>
+        {item.links?.hubspotUrl && <a className="rq-btn" href={item.links.hubspotUrl} target="_blank" rel="noreferrer">Open ↗</a>}
+        <button className="rq-btn" disabled={busy} onClick={() => onAct(item, 'done')}>✓ Done</button>
+        <button className="rq-btn" disabled={busy} onClick={() => onAct(item, 'snooze', { days: 3 })}>Snooze</button>
+        <button className="rq-btn rq-btn-ghost" disabled={busy} onClick={() => onAct(item, 'dismiss')}>Dismiss</button>
+      </div>
+    </div>
+  );
+}
+
+function OperatingItemDetailDrawer({ item, sendMessage, onAct, onClose }) {
+  const cat = OP_CAT[item.category] || { l: item.category };
+  return (
+    <div className="rq-drawer-overlay" onClick={onClose}>
+      <div className="rq-drawer" onClick={e => e.stopPropagation()}>
+        <div className="rq-drawer-hdr">
+          <div><PriorityBadge level={item.priorityLevel}/><span className="rq-drawer-score">{cat.l} · {OP_TYPE_LBL[item.type] || item.type}</span></div>
+          <button className="rq-drawer-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="rq-drawer-name">{item.title}</div>
+        {item.summary && <div className="op-summary" style={{marginBottom:12}}>{item.summary}</div>}
+
+        <div className="rq-facts">
+          {[['Impact', item.estimatedImpact != null ? rqFmt$(item.estimatedImpact) : item.impactLabel],
+            ['Priority', `${item.priorityLevel} (${item.priorityScore})`],
+            ['Owner', item.ownerName || '—'],
+            ['Confidence', item.confidence?.level || '—']].map(([k, v]) => (
+            <div key={k} className="rq-fact"><div className="rq-fact-k">{k}</div><div className="rq-fact-v">{v}</div></div>
+          ))}
+        </div>
+
+        {item.whyItMatters && <><div className="rq-drawer-section">Why it matters</div><div className="op-summary">{item.whyItMatters}</div></>}
+        {item.riskIfIgnored && <><div className="rq-drawer-section">Risk if ignored</div><div className="op-summary">{item.riskIfIgnored}</div></>}
+        {item.recommendedAction && <div className="rq-action rq-action-lg"><Icon name="arrowR" size={12}/> {item.recommendedAction}</div>}
+
+        <div className="rq-drawer-actions" style={{flexWrap:'wrap'}}>
+          {item.links?.hubspotUrl && <a className="rq-btn" href={item.links.hubspotUrl} target="_blank" rel="noreferrer">Open source ↗</a>}
+          <button className="rq-btn" onClick={() => onAct(item, 'done')}>✓ Mark done</button>
+          <button className="rq-btn" onClick={() => onAct(item, 'snooze', { days: 3 })}>Snooze 3d</button>
+          <button className="rq-btn" onClick={() => onAct(item, 'add_to_meeting', { meeting: 'sales' })}>+ Meeting brief</button>
+          <button className="rq-btn rq-btn-ghost" onClick={() => onAct(item, 'dismiss')}>Dismiss</button>
+        </div>
+        <button className="rq-btn" style={{marginTop:8}} onClick={() => sendMessage(`Explain this priority and what I should do: "${item.title}". ${item.summary || ''} ${item.whyItMatters || ''} Be specific and grounded in our data.`)}>Ask AI to explain</button>
+
+        <div style={{marginTop:14}}><SourceTrail trail={item.sourceTrail} confidence={item.confidence}/></div>
+        <div style={{height:20}}/>
+      </div>
+    </div>
+  );
+}
+
+function TodayView({ currentUser, perms, sendMessage }) {
+  const email = currentUser?.email || '';
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [drawer, setDrawer] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+  const [cat, setCat] = useState('all');
+  const [limit, setLimit] = useState(7);
+
+  const load = useCallback(() => {
+    if (!email) return;
+    setLoading(true);
+    fetch(`/.netlify/functions/operating?requester_email=${encodeURIComponent(email)}`)
+      .then(r => r.json()).then(d => { if (d.ok) { setData(d); setErr(''); } else setErr(d.error || 'Could not load'); })
+      .catch(() => setErr('Could not load Today right now.')).finally(() => setLoading(false));
+  }, [email]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { setLimit(7); }, [cat]);
+
+  const act = async (item, action, extra = {}) => {
+    setBusyId(item.id);
+    try {
+      await fetch('/.netlify/functions/operating-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, item_id: item.id, requester_email: email, ...extra }) });
+      if (action === 'done' || action === 'dismiss' || action === 'snooze') {
+        setData(d => d ? { ...d, items: d.items.filter(i => i.id !== item.id) } : d);
+        if (drawer?.id === item.id) setDrawer(null);
+      }
+    } finally { setBusyId(null); }
+  };
+
+  const items = data?.items || [];
+  const cats = Array.from(new Set(items.map(i => i.category)));
+  const shown = cat === 'all' ? items : items.filter(i => i.category === cat);
+  const first = (currentUser?.name || '').split(' ')[0];
+
+  return (
+    <div className="data-view-scroll">
+      <div className="dv-header">
+        <div>
+          <div className="dv-eyebrow">{data?.role === 'leadership' ? 'Leadership · what matters now' : `${first}'s priorities`}</div>
+          <h2 className="dv-title">Today</h2>
+        </div>
+        <button className="sc-add-btn" onClick={load} disabled={loading}>{loading ? '…' : '↻ Refresh'}</button>
+      </div>
+
+      {err && <div className="dv-empty">⚠ {err}</div>}
+
+      {cats.length > 1 && (
+        <div className="pipe-toggle" style={{marginBottom:14, flexWrap:'wrap'}}>
+          <button className={`pipe-toggle-btn${cat === 'all' ? ' active' : ''}`} onClick={() => setCat('all')}>All ({items.length})</button>
+          {cats.map(c => (
+            <button key={c} className={`pipe-toggle-btn${cat === c ? ' active' : ''}`} onClick={() => setCat(c)}>
+              {(OP_CAT[c]?.l || c)} ({items.filter(i => i.category === c).length})
+            </button>
+          ))}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="dv-loading-rows">{[1,2,3].map(i => <div key={i} className="dv-row-skel"/>)}</div>
+      ) : shown.length > 0 ? (
+        <>
+          <div className="op-list">
+            {shown.slice(0, limit).map(item => <OperatingItemCard key={item.id} item={item} onOpen={setDrawer} onAct={act} busy={busyId === item.id}/>)}
+          </div>
+          {shown.length > limit && <button className="rq-showmore" onClick={() => setLimit(l => l + 7)}>Show {Math.min(7, shown.length - limit)} more ({shown.length - limit} left)</button>}
+        </>
+      ) : (
+        <div className="dv-empty">{data ? '🎉 Nothing needs your attention right now — you’re clear.' : 'Loading…'}</div>
+      )}
+
+      <button className="dv-ai-btn" onClick={() => sendMessage(data?.role === 'leadership'
+        ? 'Give me a leadership briefing from today’s priorities — biggest risks, revenue at stake, and the single most important decision to make today.'
+        : 'Walk me through my top priorities today and what to do first, with why each matters.')}>
+        <span>Ask AI for a briefing</span>
+        <Icon name="arrowR" size={13}/>
+      </button>
+      <div style={{height:32}}/>
+
+      {drawer && <OperatingItemDetailDrawer item={drawer} sendMessage={sendMessage} onAct={act} onClose={() => setDrawer(null)}/>}
+    </div>
+  );
+}
+
 function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms, onNav }) {
   const [activity, setActivity] = React.useState(null);
   const [followups, setFollowups] = React.useState(null);
@@ -3894,6 +4087,7 @@ function AppInner() {
               {sidebarOpen && <div className="snav-section">Navigation</div>}
               {[
                 { key:'home',      icon:'home',     label:'Dashboard' },
+                { key:'today',     icon:'today',    label:'Today'     },
                 { key:'goals',     icon:'goals',    label:'Goals'     },
                 ...(perms.googleAds ? [{ key:'gads',  icon:'chart',    label:'Google Ads' }] : []),
                 ...(perms.gbp      ? [{ key:'gbp',   icon:'gbp',      label:'GBP'        }] : []),
@@ -3906,6 +4100,7 @@ function AppInner() {
                 <button key={item.key}
                   className={`snav-btn${
                     (mainView==='dashboard' && item.key==='home') ||
+                    (mainView==='today'     && item.key==='today') ||
                     (mainView==='goals'     && item.key==='goals') ||
                     (mainView==='google-ads'&& item.key==='gads') ||
                     (mainView==='gbp'       && item.key==='gbp') ||
@@ -3917,6 +4112,7 @@ function AppInner() {
                   title={item.label}
                   onClick={() => {
                     if (item.key === 'home')  { setMobileTab('dashboard'); setMainView('dashboard'); }
+                    else if (item.key === 'today') { setMobileTab('dashboard'); setMainView('today'); }
                     else if (item.key === 'goals') { setMobileTab('goals'); setMainView('goals'); }
                     else if (item.key === 'gads')  { setMobileTab('google-ads'); setMainView('google-ads'); }
                     else if (item.key === 'gbp')   { setMobileTab('dashboard'); setMainView('gbp'); }
@@ -3957,13 +4153,13 @@ function AppInner() {
               <header className="mobile-header">
                 <span className="mobile-header-title">
                   {mobileTab === 'chat' ? 'Pure Turf AI' : ({
-                    dashboard: 'Dashboard', goals: 'Goals', 'google-ads': 'Google Ads',
+                    dashboard: 'Dashboard', today: 'Today', goals: 'Goals', 'google-ads': 'Google Ads',
                     gbp: 'GBP', pipeline: 'Pipeline', rescue: 'Revenue Rescue', scorecard: 'Scorecard',
                     search: 'Search & Visibility', finance: 'Finance',
                   }[mainView] || 'Dashboard')}
                 </span>
                 <div className="mobile-header-right">
-                  {mobileTab !== 'chat' && !['scorecard','search','finance','gbp','rescue'].includes(mainView) && (
+                  {mobileTab !== 'chat' && !['scorecard','search','finance','gbp','rescue','today'].includes(mainView) && (
                     <select className="range-picker" value={dateRange} onChange={e=>setDateRange(e.target.value)}>
                       {Object.entries(DATE_RANGES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                     </select>
@@ -3988,7 +4184,7 @@ function AppInner() {
                 {!isMobile && (
                 <div className="left-col-hdr">
                   <DataHealthBanner variant="inline" liveStats={liveStats} statsLoading={statsLoading}/>
-                  {!['scorecard','search','finance','gbp','rescue'].includes(mainView) && (
+                  {!['scorecard','search','finance','gbp','rescue','today'].includes(mainView) && (
                     <select className="range-picker" value={dateRange} onChange={e=>setDateRange(e.target.value)}>
                       {Object.entries(DATE_RANGES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                     </select>
@@ -4077,6 +4273,11 @@ function AppInner() {
                 {/* PIPELINE VIEW */}
                 <div className="goals-col" style={{display: mainView === 'pipeline' ? undefined : 'none'}}>
                   <PipelineView key={dateRange} liveStats={liveStats} statsLoading={statsLoading} dateRange={dateRange} sendMessage={sendMessage} currentUserEmail={currentUser?.email} onNav={perms.rescue ? () => setMainView('rescue') : null}/>
+                </div>
+
+                {/* TODAY VIEW (operating items) */}
+                <div className="goals-col" style={{display: mainView === 'today' ? undefined : 'none'}}>
+                  {mainView === 'today' && <TodayView currentUser={currentUser} perms={perms} sendMessage={sendMessage}/>}
                 </div>
 
                 {/* REVENUE RESCUE VIEW */}

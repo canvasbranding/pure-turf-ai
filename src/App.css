@@ -1691,3 +1691,35 @@ html[data-theme="dark"] .kpi-reason-list { background:rgba(255,255,255,0.04); }
 .rq-src-caveat { margin-top:10px; font-size:11.5px; line-height:1.55; color:var(--text-2); background:rgba(214,170,30,0.08); border:1px solid rgba(214,170,30,0.25); border-radius:var(--r-xs); padding:9px 12px; }
 .goal-align { margin-top:18px; padding-top:18px; border-top:1px dashed var(--border-md); }
 .gb-none { background:var(--text-3) !important; }
+
+/* ── Operating Items / Today ─────────────────────────────────────────────── */
+.op-list { display:flex; flex-direction:column; gap:10px; }
+.op-card { background:var(--card); border:1px solid var(--border); border-radius:var(--r-sm); padding:13px 15px; cursor:pointer; transition:border-color .12s, box-shadow .12s; }
+.op-card:hover { border-color:var(--accent-bdr); box-shadow:var(--shadow-sm); }
+.op-card-top { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+.op-cat { font-size:10.5px; font-weight:700; letter-spacing:0.02em; text-transform:uppercase; }
+.op-impact { margin-left:auto; font-size:12.5px; font-weight:700; color:var(--text); }
+.op-title { font-size:14px; font-weight:600; color:var(--text); margin-bottom:3px; }
+.op-summary { font-size:12.5px; line-height:1.5; color:var(--text-2); }
+.op-action { display:flex; align-items:center; gap:5px; font-size:12.5px; font-weight:600; color:var(--accent); margin-top:7px; }
+.op-btns { display:flex; flex-wrap:wrap; gap:6px; margin-top:11px; }
+
+.op-badge { font-size:9.5px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; padding:2px 8px; border-radius:6px; white-space:nowrap; }
+.op-pri-crit { background:rgba(200,70,60,.16); color:#C8463C; }
+.op-pri-high { background:rgba(224,122,40,.16); color:#E07A28; }
+.op-pri-med  { background:rgba(214,170,30,.16); color:#B58A00; }
+.op-pri-low  { background:var(--surface); color:var(--text-3); }
+
+.op-conf { font-size:10px; font-weight:600; padding:1px 7px; border-radius:5px; }
+.op-conf-hi { background:rgba(78,138,96,.14); color:var(--green); }
+.op-conf-md { background:rgba(214,170,30,.14); color:#B58A00; }
+.op-conf-lo { background:rgba(200,70,60,.12); color:#C8463C; }
+
+.op-src { margin-top:4px; }
+.op-src-toggle { font-family:var(--font); font-size:11px; font-weight:600; color:var(--text-3); background:none; border:none; cursor:pointer; padding:2px 0; }
+.op-src-toggle:hover { color:var(--accent); }
+.op-src-body { margin-top:6px; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xs); display:flex; flex-direction:column; gap:5px; font-size:11.5px; color:var(--text-2); }
+.op-src-body > div { display:flex; gap:8px; }
+.op-src-body span { flex:0 0 64px; color:var(--text-3); font-weight:600; }
+.op-datastate { font-style:normal; font-weight:700; }
+.op-ds-live { color:var(--green); } .op-ds-cached { color:#B58A00; } .op-ds-estimated, .op-ds-manual { color:var(--text-3); }
