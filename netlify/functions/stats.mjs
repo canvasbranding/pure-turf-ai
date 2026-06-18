@@ -342,10 +342,9 @@ export const handler = async (event) => {
   // ── HubSpot ─────────────────────────────────────────────
   if (hubspotResult.status === 'fulfilled') {
     const { sales: s, commercial: c } = hubspotResult.value;
-    const year = new Date().getFullYear();
     // Primary tile + dashboard = 2026 Sales (residential). Commercial is exposed
     // alongside so the Pipeline view can toggle to it.
-    stats.pipeline = { total: s.total, sub: `deals · ${year}`, dir: '' };
+    stats.pipeline = { total: s.total, sub: 'open + closed (all years)', dir: '' };
     stats.hubspot  = { total: s.total, newLeads: s.newLeads, activeLeads: s.activeLeads, revenue: s.revenue, closeRate: s.closeRate, wonCount: s.wonCount, lostCount: s.lostCount, openValue: s.openValue, stageBreakdown: s.stageBreakdown, repLeaderboard: s.repLeaderboard, recentDeals: s.recentDeals, leadSources: s.leadSources, taggedLeads: s.taggedLeads, attributedLeads: s.attributedLeads, createdTrend: s.createdTrend };
     stats.hubspotCommercial = { total: c.total, newLeads: c.newLeads, activeLeads: c.activeLeads, revenue: c.revenue, closeRate: c.closeRate, wonCount: c.wonCount, lostCount: c.lostCount, stageBreakdown: c.stageBreakdown, repLeaderboard: c.repLeaderboard, recentDeals: c.recentDeals, leadSources: c.leadSources, taggedLeads: c.taggedLeads, attributedLeads: c.attributedLeads, createdTrend: c.createdTrend };
   } else { stats.errors.hubspot = hubspotResult.reason?.message; }

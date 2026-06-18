@@ -190,7 +190,7 @@ const GOAL_DEFS = [
 const GOAL_AREAS = [
   { key:'company', label:'Company', perm:'goalAdmin',    owner:'David Patton', metrics:[
     { id:'revenue',         label:'Annual Revenue',  format:'currency', cadence:'annual',   getActual: s => s?.hubspot?.revenue ?? null },
-    { id:'newCustomers',    label:'New Customers',    format:'number',   cadence:'annual',   getActual: s => s?.rgServices?.estNewCustomers ?? null },
+    { id:'newCustomers',    label:'Programs Sold',    format:'number',   cadence:'annual',   getActual: s => s?.rgServices?.estNewCustomers ?? null },
     { id:'activeCustomers', label:'Active Customers', format:'number',   cadence:'snapshot', getActual: s => s?.rgServices?.estActiveCustomers ?? null },
     { id:'closeRate',       label:'Close Rate',       format:'percent',  cadence:'rate',     getActual: s => s?.hubspot?.closeRate ?? null },
   ]},
@@ -377,13 +377,15 @@ const ALL_TILES = [
   // Meta Ads — disabled while the Windsor slot is reallocated to QuickBooks. Restore by
   // re-adding this tile + the facebook_ads fetch in stats.mjs once Meta is reconnected.
   // { key:'meta', lbl:'Meta Ads', val:1205, prefix:'$', sub:'↓ $484 CPA', dir:'dn', perm:'metaAds', group:'Marketing' },
-  { key:'gbp',       lbl:'GBP Impressions', val:2841, prefix:'',  sub:'↑ 47 calls this week',  dir:'up', perm:'gbp',       group:'Marketing' },
+  // GBP dashboard tile removed — Windsor's GBP feed was unreliable (1.7M "views"). The
+  // GBP section now runs on accurate Search Atlas data; re-add an accurate tile here once
+  // Search Atlas performance is wired into stats.
   // Business-outcome tiles — lead with the funnel (leads → closes → revenue); total
   // deal count is context, so it sits last in the Sales group.
   { key:'leads',      lbl:'New Leads',      val:0, prefix:'',  sub:'new this period',   dir:'up', perm:'pipeline', group:'Sales' },
   { key:'closeRate',  lbl:'Close Rate',     val:0, prefix:'',  suffix:'%', sub:'won vs lost', dir:'', perm:'pipeline', group:'Sales' },
   { key:'revenue',    lbl:'Revenue',        val:0, prefix:'$', sub:'closed won',        dir:'up', perm:'pipeline', group:'Sales' },
-  { key:'pipeline',  lbl:'Total Deals',  val:1617, prefix:'',  sub:'open + closed · 2026',   dir:'',   perm:'pipeline',  group:'Sales' },
+  { key:'pipeline',  lbl:'Total Deals',  val:1617, prefix:'',  sub:'open + closed (all years)',   dir:'',   perm:'pipeline',  group:'Sales' },
   { key:'newCustomers',lbl:'Programs Sold', val:0, prefix:'',  sub:'sold this period', dir:'up', perm:'pipeline', group:'Customers' },
   { key:'activeCustomers',lbl:'Active Programs', val:0, prefix:'', sub:'active service book', dir:'', perm:'pipeline', group:'Customers' },
   { key:'estCustomers',lbl:'Customers (est.)', val:0, prefix:'~', sub:'unique active accounts', dir:'', perm:'pipeline', group:'Customers' },
@@ -457,8 +459,8 @@ function KPIsSection({ liveStats, statsLoading, rangeLabel, sendMessage }) {
       <div className="kpi-group">
         <div className="kpi-group-label">Customers · {rangeLabel}</div>
         <div className="kpi-grid">
-          <KpiCard loading={statsLoading} label="Total Active" value={fmtN(totalActive)} sub="residential accounts" onClick={() => sendMessage(`How many total active customers do we have and how has that trended?`)}/>
-          <KpiCard loading={statsLoading} label="New Customers" value={fmtN(newCustomers)} sub="added this period" onClick={() => sendMessage(`How many new customers did we add ${rangeLabel}?`)}/>
+          <KpiCard loading={statsLoading} label="Active Programs" value={fmtN(totalActive)} sub="active service records" onClick={() => sendMessage(`How many active programs (service records) do we have, and roughly how many unique customers is that?`)}/>
+          <KpiCard loading={statsLoading} label="Programs Sold" value={fmtN(newCustomers)} sub="sold this period (incl. renewals)" onClick={() => sendMessage(`How many programs were sold ${rangeLabel} — and how many are brand-new customers vs renewals?`)}/>
           <KpiCard loading={statsLoading} label="Cancels" value={fmtN(newCancels)} sub="this period" status={newCancels > 0 ? 'warn' : null} onClick={() => sendMessage(`How many customers cancelled this period and what were the reasons?`)}/>
           <KpiCard loading={statsLoading} label="Cancel Pending" value={fmtN(cancelPending)} sub="at risk" status={cancelPending > 5 ? 'warn' : null} onClick={() => sendMessage(`Who is cancel pending right now and what should we do?`)}/>
         </div>
@@ -962,12 +964,11 @@ function TrendChart({ data, secondary, height = 110, color = '#5E6AD2', color2 =
 }
 
 // ══ GBP VIEW ══════════════════════════════════════════════════════════════
-function GBPView({ liveStats, statsLoading, dateRange, sendMessage }) {
-  const d = liveStats?.gbp;
-  const rangeLabel = DATE_RANGES[dateRange]?.label || 'Month to date';
-  const fmtN = v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v ?? '–');
-
-  // Search Atlas adds reputation + per-location profile completeness.
+function GBPView({ sendMessage }) {
+  // GBP is powered entirely by Search Atlas (accurate, all 4 locations). The old Windsor
+  // "views/calls" feed was unreliable (reported 1.7M views / inconsistent calls), so it's
+  // dropped. Profile-action metrics (views/calls/directions) need the Search Atlas
+  // performance endpoint, which isn't wired yet — see audit note.
   const [sa, setSa] = React.useState(null);
   React.useEffect(() => {
     let cancelled = false;
@@ -976,87 +977,48 @@ function GBPView({ liveStats, statsLoading, dateRange, sendMessage }) {
   }, []);
   const reviews = sa?.reviews;
   const locs = sa?.gbpLocations || [];
+  const local = sa?.local;
+  const loading = !sa;
   const avgCompleteness = locs.filter(l => l.completeness != null).length
     ? Math.round(locs.filter(l => l.completeness != null).reduce((s, l) => s + l.completeness, 0) / locs.filter(l => l.completeness != null).length) : null;
-
-  const metrics = d ? [
-    { label:'Search Impressions', val: fmtN(d.views),      icon:'📍', desc:'Times shown in search + maps' },
-    { label:'Phone Calls',        val: fmtN(d.calls),      icon:'📞', desc:'Calls from profile' },
-    { label:'Direction Requests', val: fmtN(d.directions), icon:'🧭', desc:'Get directions taps' },
-    { label:'Website Clicks',     val: fmtN(d.webClicks),  icon:'🔗', desc:'Clicks to website' },
-  ] : [];
-
-  // Find max views for bar scale
-  const maxViews = d?.trend?.length > 0 ? Math.max(...d.trend.map(t => t.views), 1) : 1;
 
   return (
     <div className="data-view-scroll">
       <div className="dv-header">
         <div>
-          <div className="dv-eyebrow">Local Presence</div>
+          <div className="dv-eyebrow">Local Presence · Search Atlas</div>
           <h2 className="dv-title">Google Business Profile</h2>
         </div>
-        <div className="dv-period">{rangeLabel}</div>
       </div>
 
+      <div className="dv-section-label">Reputation &amp; Local Presence</div>
       <div className="dv-kpi-row dv-kpi-row-2">
-        {metrics.map(m => (
-          <div key={m.label} className="dv-kpi-card">
-            <div className="dv-kpi-label">{m.label}</div>
-            <div className="dv-kpi-val">{statsLoading ? <span className="dv-skel"/> : m.val}</div>
-            <div className="dv-kpi-sub">{m.desc}</div>
-          </div>
-        ))}
-        {statsLoading && [1,2,3,4].map(i => (
-          <div key={i} className="dv-kpi-card">
-            <div className="dv-kpi-label">–</div>
-            <div className="dv-kpi-val"><span className="dv-skel"/></div>
-          </div>
-        ))}
+        {reviews ? <div className="dv-kpi-card"><div className="dv-kpi-label">Rating</div><div className="dv-kpi-val">{reviews.avgRating}<span style={{color:'#F5B301'}}>★</span></div><div className="dv-kpi-sub">{reviews.total.toLocaleString()} reviews</div></div>
+          : <div className="dv-kpi-card"><div className="dv-kpi-label">Rating</div><div className="dv-kpi-val">{loading ? <span className="dv-skel"/> : '–'}</div></div>}
+        {reviews && <div className="dv-kpi-card"><div className="dv-kpi-label">5-Star Reviews</div><div className="dv-kpi-val">{reviews.fiveStar.toLocaleString()}</div><div className="dv-kpi-sub">{Math.round(reviews.fiveStar/reviews.total*100)}% of total</div></div>}
+        {local?.avgPosition != null && <div className="dv-kpi-card"><div className="dv-kpi-label">Avg Map Rank</div><div className="dv-kpi-val">#{local.avgPosition}</div><div className="dv-kpi-sub">{local.prevPosition != null ? `was #${local.prevPosition}` : 'local pack'}</div></div>}
+        {avgCompleteness != null && <div className="dv-kpi-card"><div className="dv-kpi-label">Profile Complete</div><div className="dv-kpi-val">{avgCompleteness}%</div><div className="dv-kpi-sub">avg across locations</div></div>}
+        <div className="dv-kpi-card"><div className="dv-kpi-label">Locations</div><div className="dv-kpi-val">{loading ? <span className="dv-skel"/> : (locs.length || '–')}</div><div className="dv-kpi-sub">profiles</div></div>
       </div>
-      {d && <div className="sc-note" style={{marginTop:-6, marginBottom:14}}>Performance totals are summed across all {locs.length || 4} locations (via Windsor). Phone-call counts can lag a few days behind Google.</div>}
 
-      {/* Reputation + profile health (Search Atlas) */}
-      {(reviews || avgCompleteness != null) && (
+      {locs.some(l => l.completeness != null) && (
         <>
-          <div className="dv-section-label">Reputation &amp; Profile Health</div>
-          <div className="dv-kpi-row" style={{marginBottom:14}}>
-            {reviews && <div className="dv-kpi-card"><div className="dv-kpi-label">Rating</div><div className="dv-kpi-val">{reviews.avgRating}<span style={{color:'#F5B301'}}>★</span></div><div className="dv-kpi-sub">{reviews.total.toLocaleString()} reviews</div></div>}
-            {reviews && <div className="dv-kpi-card"><div className="dv-kpi-label">5-Star Reviews</div><div className="dv-kpi-val">{reviews.fiveStar.toLocaleString()}</div><div className="dv-kpi-sub">{Math.round(reviews.fiveStar/reviews.total*100)}% of total</div></div>}
-            {avgCompleteness != null && <div className="dv-kpi-card"><div className="dv-kpi-label">Profile Complete</div><div className="dv-kpi-val">{avgCompleteness}%</div><div className="dv-kpi-sub">avg across locations</div></div>}
-            <div className="dv-kpi-card"><div className="dv-kpi-label">Locations</div><div className="dv-kpi-val">{locs.length || '–'}</div><div className="dv-kpi-sub">verified profiles</div></div>
+          <div className="dv-section-label" style={{marginTop:6}}>Profile Completeness by Location</div>
+          <div className="gbp-loc-list">
+            {locs.filter(l => l.completeness != null).map(l => (
+              <div key={l.id} className="gbp-loc">
+                <div className="gbp-loc-name">{(l.address || l.name || '').split(',')[0]}</div>
+                <div className="gbp-loc-track"><div className="gbp-loc-fill" style={{width:`${l.completeness}%`}}/></div>
+                <div className="gbp-loc-pct">{l.completeness}%</div>
+              </div>
+            ))}
           </div>
-          {locs.some(l => l.completeness != null) && (
-            <div className="gbp-loc-list">
-              {locs.filter(l => l.completeness != null).map(l => (
-                <div key={l.id} className="gbp-loc">
-                  <div className="gbp-loc-name">{(l.address || l.name || '').split(',')[0]}</div>
-                  <div className="gbp-loc-track"><div className="gbp-loc-fill" style={{width:`${l.completeness}%`}}/></div>
-                  <div className="gbp-loc-pct">{l.completeness}%</div>
-                </div>
-              ))}
-            </div>
-          )}
         </>
       )}
 
-      {/* Views & calls trend */}
-      {d?.trend?.length > 1 && (
-        <>
-          <div className="dv-section-label" style={{marginTop:4}}>
-            {d.trend.length}-Day Trend
-            <span className="dv-section-note" style={{opacity:1}}><span style={{color:'var(--accent,#5E6AD2)'}}>● Views</span>&nbsp;&nbsp;<span style={{color:'#10B981'}}>┄ Calls</span></span>
-          </div>
-          <TrendChart
-            data={d.trend.map(t => t.views)}
-            secondary={d.trend.map(t => t.calls)}
-            valueFmt={v => Math.round(v).toLocaleString()}
-            labels={[d.trend[0].date.slice(5), d.trend[Math.floor(d.trend.length/2)].date.slice(5), d.trend[d.trend.length-1].date.slice(5)]}
-          />
-        </>
-      )}
+      <div className="sc-note" style={{marginTop:14}}>Live from Search Atlas across all {locs.length || 4} locations. Profile-action metrics (views, calls, directions) are temporarily off — Windsor's GBP feed was unreliable; re-sourcing from Search Atlas.</div>
 
-      <button className="dv-ai-btn" onClick={() => sendMessage(`Analyze our Google Business Profile performance for ${rangeLabel} — views, calls, and what we should do to improve local search visibility.`)}>
+      <button className="dv-ai-btn" onClick={() => sendMessage(`Analyze our Google Business Profile — our rating, reviews, local map rank, and profile completeness across locations. What should we do to improve local search visibility and get more calls?`)}>
         <span>Ask AI for analysis</span>
         <Icon name="arrowR" size={13}/>
       </button>
@@ -3401,7 +3363,7 @@ function AppInner() {
                   }[mainView] || 'Dashboard')}
                 </span>
                 <div className="mobile-header-right">
-                  {mobileTab !== 'chat' && !['scorecard','search','finance'].includes(mainView) && (
+                  {mobileTab !== 'chat' && !['scorecard','search','finance','gbp'].includes(mainView) && (
                     <select className="range-picker" value={dateRange} onChange={e=>setDateRange(e.target.value)}>
                       {Object.entries(DATE_RANGES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                     </select>
@@ -3426,7 +3388,7 @@ function AppInner() {
                 {!isMobile && (
                 <div className="left-col-hdr">
                   <DataHealthBanner variant="inline" liveStats={liveStats} statsLoading={statsLoading}/>
-                  {!['scorecard','search','finance'].includes(mainView) && (
+                  {!['scorecard','search','finance','gbp'].includes(mainView) && (
                     <select className="range-picker" value={dateRange} onChange={e=>setDateRange(e.target.value)}>
                       {Object.entries(DATE_RANGES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                     </select>
