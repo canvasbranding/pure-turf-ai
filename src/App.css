@@ -1650,3 +1650,9 @@ html[data-theme="dark"] .kpi-reason-list { background:rgba(255,255,255,0.04); }
 }
 .rq-showmore { width:100%; margin-top:10px; font-family:var(--font); font-size:12.5px; font-weight:600; color:var(--accent); background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); padding:10px; cursor:pointer; }
 .rq-showmore:hover { background:var(--surface-md); }
+/* Compact team health table — fits the rescue panel without clipping; scrolls if narrow */
+.rq-health-table { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.rq-health-table .dv-table-hdr, .rq-health-table .dv-table-row { min-width:0; }
+.rq-health-table .dv-table-hdr .dv-col-num, .rq-health-table .dv-col-num { white-space:nowrap; }
+.rq-health-table .dv-col-main { flex:1; min-width:88px; }
+.rq-health-table .dv-col-num { width:54px; }

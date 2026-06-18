@@ -2303,12 +2303,12 @@ function RevenueRescueView({ liveStats, sendMessage, currentUser, perms }) {
       {/* Manager: team follow-up health table */}
       {isManager && data?.byRep?.length > 0 && (
         <>
-          <div className="dv-section-label">Team Follow-Up Health <span className="dv-section-note">tap a rep to filter their queue</span></div>
-          <div className="dv-table sc-rep-table">
+          <div className="dv-section-label">Team Follow-Up Health <span className="dv-section-note">tap a rep to filter</span></div>
+          <div className="dv-table rq-health-table">
             <div className="dv-table-hdr">
               <div className="dv-col-main">Rep</div>
               <div className="dv-col-num">Open</div>
-              <div className="dv-col-num">Cont.%</div>
+              <div className="dv-col-num">Cont%</div>
               <div className="dv-col-num">Stale</div>
               <div className="dv-col-num">Rescue</div>
               <div className="dv-col-num">At Risk</div>
