@@ -54,7 +54,7 @@ const Icon = ({ name, size = 16 }) => {
 
 // ── USER REGISTRY ─────────────────────────────────────────────────────────
 const USERS = [
-  { email: 'dhamby@pureturfllc.com',  name: 'David Hamby',      role: 'admin',     initials: 'DH', title: 'Director of Marketing',  pin: '9853' },
+  { email: 'dhamby@pureturfllc.com',  name: 'David Hamby',      role: 'executive', initials: 'DH', title: 'Director of Marketing',  pin: '9853' },
   { email: 'david@pureturfllc.com',   name: 'David Patton',     role: 'owner',     initials: 'DP', title: 'Owner',                  pin: '1234' },
   { email: 'sbuchanan@pureturfllc.com', name: 'Sean Buchanan',  role: 'executive', initials: 'SB', title: 'Director of Operations', pin: '1234' },
   { email: 'kdryden@pureturfllc.com', name: 'Kurt Dryden',      role: 'executive', initials: 'KD', title: 'VP of Finance',          pin: '1234' },
@@ -74,6 +74,9 @@ const TEAM_GOALS_EMAILS = ['david@pureturfllc.com', 'kdryden@pureturfllc.com', '
 // goals via goalAdmin (owner). dhamby = admin, can set everything.
 const FINANCE_GOALS_EMAILS = ['kdryden@pureturfllc.com', 'dhamby@pureturfllc.com'];
 const SALES_GOALS_EMAILS   = ['dturner@pureturfllc.com', 'dhamby@pureturfllc.com'];
+// Super-admins keep full admin tooling (Permissions editor + User management) regardless
+// of their displayed role — so David Hamby can read as "Executive" without losing access.
+const SUPER_ADMIN_EMAILS   = ['dhamby@pureturfllc.com'];
 
 const DEFAULT_PERMISSIONS = {
   // finance: hidden for now (QuickBooks integration stays built — flip these to true to restore).
@@ -370,7 +373,10 @@ function getPerms(email, role, overrides) {
   if (TEAM_GOALS_EMAILS.includes(email))     base.teamGoals    = true;
   if (FINANCE_GOALS_EMAILS.includes(email)) { base.financeGoals = true; base.adminPanel = true; }
   if (SALES_GOALS_EMAILS.includes(email))   { base.salesGoals   = true; base.adminPanel = true; }
-  return { ...base, ...(overrides[email]||{}) };
+  const result = { ...base, ...(overrides[email]||{}) };
+  // Super-admin tools are sticky — can't be removed by role or override.
+  if (SUPER_ADMIN_EMAILS.includes(email)) { result.adminPanel = true; result.manageUsers = true; }
+  return result;
 }
 
 const ALL_TILES = [
@@ -1344,7 +1350,7 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
   const canManageUsers  = perms.manageUsers;
   const canSetCompGoals = perms.goalAdmin;
   const canSetTeamGoals = perms.teamGoals;
-  const canManagePerms  = role === 'admin';
+  const canManagePerms  = role === 'admin' || SUPER_ADMIN_EMAILS.includes(currentUser?.email);
   const hasPending = pendingUsers.length > 0;
 
   // Query log state (David Hamby only)

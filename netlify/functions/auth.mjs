@@ -79,7 +79,7 @@ function publicUser(u) {
 // client) so nobody can grant themselves a role. Roster members are pre-approved and
 // self-claim a PIN on first login.
 const ROSTER = {
-  'dhamby@pureturfllc.com':    { name: 'David Hamby',     role: 'admin',     title: 'Director of Marketing',  initials: 'DH' },
+  'dhamby@pureturfllc.com':    { name: 'David Hamby',     role: 'executive', title: 'Director of Marketing',  initials: 'DH' }, // executive role; full admin tooling retained via SUPER_ADMIN allowlist in the client
   'david@pureturfllc.com':     { name: 'David Patton',    role: 'owner',     title: 'Owner',                  initials: 'DP' },
   'sbuchanan@pureturfllc.com': { name: 'Sean Buchanan',   role: 'executive', title: 'Director of Operations', initials: 'SB' },
   'kdryden@pureturfllc.com':   { name: 'Kurt Dryden',     role: 'executive', title: 'VP of Finance',          initials: 'KD' },
