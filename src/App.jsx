@@ -2015,6 +2015,91 @@ function ScCoach({ role, name, period, context }) {
   );
 }
 
+// One rep's full scorecard body — used both for the rep's own view and for a manager
+// drilling into a rep. Goal create/edit is delegated up (onSetGoal/onEditGoal).
+function RepScorecardBody({ repRow, repEmail, repName, repGoals, rangeLabel, loading, followupsLoaded, sendMessage, onSetGoal, onEditGoal, onBack }) {
+  const fmt$ = v => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v||0}`;
+  const actualOf = g => { const m = SC_METRICS[g.metric_key]; return m && repRow ? m.get(repRow) : null; };
+  const goals = (repGoals || []).filter(g => g.status === 'active' || !g.status);
+  const headline = goals.map(g => ({ g, p: scorecardPacing(g.metric_key, g, actualOf(g)) })).find(x => x.p);
+  const first = (repName || 'Rep').split(' ')[0];
+  const SNAP = [
+    { k: 'revenue', label: 'Revenue', v: repRow ? fmt$(repRow.revenue) : '–' },
+    { k: 'won', label: 'New Customers', v: repRow?.won ?? '–' },
+    { k: 'leads', label: 'Leads', v: repRow?.leads ?? '–' },
+    { k: 'closeRate', label: 'Close Rate', v: repRow?.closeRate != null ? `${repRow.closeRate}%` : '–' },
+    { k: 'calls', label: 'Calls', v: repRow ? repRow.calls : '–' },
+    { k: 'programs', label: 'Programs', v: repRow?.programsTotal ?? '–' },
+  ];
+  const mine = !onBack; // rep's own view vs manager drill-in
+  return (
+    <>
+      <div className="dv-header">
+        <div>
+          {onBack && <button className="sc-back" onClick={onBack}>← Team</button>}
+          <div className="dv-eyebrow">{mine ? 'My Sales Scorecard' : 'Rep Scorecard'} · {rangeLabel}</div>
+          <h2 className="dv-title">{first}'s Scorecard</h2>
+        </div>
+      </div>
+
+      {headline && (
+        <div className={`sc-summary gc-${headline.p.tone}`}>
+          <div className="sc-summary-lbl">{headline.g.title || SC_METRICS[headline.g.metric_key]?.label} · pacing</div>
+          <div className="sc-summary-main"><span className={`goal-card-status gs-${headline.p.tone}`}>{headline.p.statusLabel}</span> · {headline.p.percentToGoal}% to goal</div>
+          <div className="sc-summary-sub">Projected {fmtMetric(SC_METRICS[headline.g.metric_key]?.format, headline.p.projectedFinish)} · gap {headline.p.gap >= 0 ? '+' : ''}{fmtMetric(SC_METRICS[headline.g.metric_key]?.format, headline.p.gap)} · {headline.p.daysLeft} days left</div>
+        </div>
+      )}
+
+      <div className="sc-section-row">
+        <div className="dv-section-label" style={{margin:0}}>{mine ? 'My Goals' : `${first}'s Goals`}</div>
+        <button className="sc-add-btn" onClick={() => onSetGoal(repEmail)}>+ Set a goal</button>
+      </div>
+      {goals.length === 0 ? (
+        <div className="sc-empty">No goal set yet. <button className="sc-link" onClick={() => onSetGoal(repEmail)}>Create a monthly revenue goal</button> to start tracking pace.</div>
+      ) : (
+        <div className="sc-goal-grid">{goals.map(g => <ScGoalCard key={g.id} goal={g} actual={actualOf(g)} canEdit onEdit={() => onEditGoal(g)}/>)}</div>
+      )}
+
+      <div className="dv-section-label" style={{margin:'18px 0 8px'}}>This Period</div>
+      <div className="sc-snap-grid">
+        {SNAP.map(s => <div key={s.k} className="sc-snap"><div className="sc-snap-lbl">{s.label}</div><div className="sc-snap-val">{loading && s.k === 'calls' ? '…' : s.v}</div></div>)}
+      </div>
+
+      {followupsLoaded && repRow && (
+        <>
+          <div className="sc-section-row" style={{marginTop:18}}>
+            <div className="dv-section-label" style={{margin:0}}>Needs Follow-Up {repRow.needsFollowUp > 0 && <span className="sc-fu-count">{repRow.needsFollowUp}</span>}</div>
+            {repRow.followUpRate != null && <span className="sc-fu-rate">{repRow.followUpRate}% of open deals current</span>}
+          </div>
+          {repRow.topDeals.length === 0 ? (
+            <div className="sc-empty">No overdue follow-ups. Every open deal has recent activity.</div>
+          ) : (
+            <div className="sc-fu-list">
+              {repRow.topDeals.map((d, i) => (
+                <div key={i} className="sc-fu-row" onClick={() => sendMessage(`Help ${mine ? 'me' : first} write a follow-up for the deal "${d.name}" (${fmt$(d.amount)}, ${d.stage}, ${d.daysSince == null ? 'never contacted' : `${d.daysSince} days cold`}). What should the message say and what's the next step?`)}>
+                  <div className="sc-fu-main">
+                    <div className="sc-fu-name">{d.name}{d.isEstimate && <span className="rep-tag">estimate</span>}</div>
+                    <div className="sc-fu-meta">{fmt$(d.amount)} · {d.daysSince == null ? 'never contacted' : `${d.daysSince}d cold`}</div>
+                  </div>
+                  <Icon name="arrowR" size={12}/>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="dv-section-label" style={{margin:'18px 0 8px'}}>Coaching</div>
+      <ScCoach role="rep" name={first} period={rangeLabel} context={{
+        metrics: repRow ? { revenue: repRow.revenue, newCustomers: repRow.won, leads: repRow.leads, closeRate: repRow.closeRate, calls: repRow.calls, programs: repRow.programsTotal, avgDeal: repRow.won ? Math.round(repRow.revenue / repRow.won) : null } : {},
+        goals: goals.map(g => { const p = scorecardPacing(g.metric_key, g, actualOf(g)); return { metric: SC_METRICS[g.metric_key]?.label, target: g.target_value, current: actualOf(g), status: p?.statusLabel, percentToGoal: p?.percentToGoal, projectedFinish: p?.projectedFinish, gap: p?.gap, daysLeft: p?.daysLeft }; }),
+        followUp: repRow ? { needsFollowUp: repRow.needsFollowUp, staleEstimates: repRow.staleEstimates, followUpRate: repRow.followUpRate, coldDeals: (repRow.topDeals || []).map(d => ({ name: d.name, amount: d.amount, daysCold: d.daysSince, stage: d.stage })) } : {},
+      }}/>
+      <div style={{height:32}}/>
+    </>
+  );
+}
+
 function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }) {
   const [activity, setActivity] = React.useState(null);
   const [followups, setFollowups] = React.useState(null);
@@ -2022,6 +2107,7 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
   const [goals, setGoals] = React.useState([]);
   const [form, setForm] = React.useState(null);   // goal being created/edited
   const [saving, setSaving] = React.useState(false);
+  const [selectedRep, setSelectedRep] = React.useState(null); // manager drill-into-rep
   const isManager = !!perms?.scorecardTeam;
 
   React.useEffect(() => {
@@ -2093,83 +2179,30 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
   const actualFor = (goal, row) => { const m = SC_METRICS[goal.metric_key]; return (m && row) ? m.get(row) : null; };
 
   // ── REP VIEW: "My Sales Scorecard" ───────────────────────────────────────
+  // Rep's own scorecard
   if (!isManager) {
     const myEmail = (currentUser?.email || '').toLowerCase();
     const myRow = rows.find(r => currentUser?.name && r.name.toLowerCase().includes(currentUser.name.split(' ')[0].toLowerCase())) || rowForEmail(myEmail);
-    const myGoals = (goalsByRep[myEmail] || []).filter(g => g.status === 'active' || !g.status);
-    const headline = myGoals.map(g => ({ g, p: scorecardPacing(g.metric_key, g, actualFor(g, myRow)) })).find(x => x.p);
-    const SNAP = [
-      { k: 'revenue', label: 'Revenue', v: myRow ? fmt$(myRow.revenue) : '–' },
-      { k: 'won', label: 'New Customers', v: myRow?.won ?? '–' },
-      { k: 'leads', label: 'Leads', v: myRow?.leads ?? '–' },
-      { k: 'closeRate', label: 'Close Rate', v: myRow?.closeRate != null ? `${myRow.closeRate}%` : '–' },
-      { k: 'calls', label: 'Calls', v: myRow ? myRow.calls : '–' },
-      { k: 'programs', label: 'Programs', v: myRow?.programsTotal ?? '–' },
-    ];
     return (
       <div className="data-view-scroll">
         {form && <ScGoalForm initial={form} reps={[{ email: myEmail, name: currentUser?.name }]} currentUser={currentUser} isManager={false} onSave={saveGoal} onClose={() => setForm(null)} busy={saving}/>}
-        <div className="dv-header">
-          <div><div className="dv-eyebrow">My Sales Scorecard · {rangeLabel}</div><h2 className="dv-title">{currentUser?.name?.split(' ')[0]}'s Scorecard</h2></div>
-        </div>
+        <RepScorecardBody repRow={myRow} repEmail={myEmail} repName={currentUser?.name} repGoals={goalsByRep[myEmail]}
+          rangeLabel={rangeLabel} loading={loading} followupsLoaded={!!followups} sendMessage={sendMessage}
+          onSetGoal={e => setForm({ rep_email: e })} onEditGoal={g => setForm(g)}/>
+      </div>
+    );
+  }
 
-        {headline && (
-          <div className={`sc-summary gc-${headline.p.tone}`}>
-            <div className="sc-summary-lbl">{headline.g.title || SC_METRICS[headline.g.metric_key]?.label} · pacing</div>
-            <div className="sc-summary-main"><span className={`goal-card-status gs-${headline.p.tone}`}>{headline.p.statusLabel}</span> · {headline.p.percentToGoal}% to goal</div>
-            <div className="sc-summary-sub">Projected {fmtMetric(SC_METRICS[headline.g.metric_key]?.format, headline.p.projectedFinish)} · gap {headline.p.gap >= 0 ? '+' : ''}{fmtMetric(SC_METRICS[headline.g.metric_key]?.format, headline.p.gap)} · {headline.p.daysLeft} days left</div>
-          </div>
-        )}
-
-        <div className="sc-section-row">
-          <div className="dv-section-label" style={{margin:0}}>My Goals</div>
-          <button className="sc-add-btn" onClick={() => setForm({ rep_email: myEmail })}>+ Set a goal</button>
-        </div>
-        {myGoals.length === 0 ? (
-          <div className="sc-empty">No goal set yet. <button className="sc-link" onClick={() => setForm({ rep_email: myEmail })}>Create a monthly revenue goal</button> to start tracking your pace.</div>
-        ) : (
-          <div className="sc-goal-grid">
-            {myGoals.map(g => <ScGoalCard key={g.id} goal={g} actual={actualFor(g, myRow)} canEdit onEdit={() => setForm(g)}/>)}
-          </div>
-        )}
-
-        <div className="dv-section-label" style={{margin:'18px 0 8px'}}>This Period</div>
-        <div className="sc-snap-grid">
-          {SNAP.map(s => <div key={s.k} className="sc-snap"><div className="sc-snap-lbl">{s.label}</div><div className="sc-snap-val">{loading && (s.k==='calls') ? '…' : s.v}</div></div>)}
-        </div>
-
-        {/* Needs follow-up — the actionable "what to do" list, grounded in real cold deals */}
-        {followups && myRow && (
-          <>
-            <div className="sc-section-row" style={{marginTop:18}}>
-              <div className="dv-section-label" style={{margin:0}}>Needs Follow-Up {myRow.needsFollowUp > 0 && <span className="sc-fu-count">{myRow.needsFollowUp}</span>}</div>
-              {myRow.followUpRate != null && <span className="sc-fu-rate">{myRow.followUpRate}% of open deals current</span>}
-            </div>
-            {myRow.topDeals.length === 0 ? (
-              <div className="sc-empty">No overdue follow-ups. Nice work — every open deal has recent activity.</div>
-            ) : (
-              <div className="sc-fu-list">
-                {myRow.topDeals.map((d, i) => (
-                  <div key={i} className="sc-fu-row" onClick={() => sendMessage(`Help me write a follow-up for my deal "${d.name}" (${fmt$(d.amount)}, ${d.stage}, ${d.daysSince == null ? 'never contacted' : `${d.daysSince} days cold`}). What should I say and what's the next step?`)}>
-                    <div className="sc-fu-main">
-                      <div className="sc-fu-name">{d.name}{d.isEstimate && <span className="rep-tag">estimate</span>}</div>
-                      <div className="sc-fu-meta">{fmt$(d.amount)} · {d.daysSince == null ? 'never contacted' : `${d.daysSince}d cold`}</div>
-                    </div>
-                    <Icon name="arrowR" size={12}/>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        <div className="dv-section-label" style={{margin:'18px 0 8px'}}>Coaching</div>
-        <ScCoach role="rep" name={currentUser?.name?.split(' ')[0] || 'rep'} period={rangeLabel} context={{
-          metrics: myRow ? { revenue: myRow.revenue, newCustomers: myRow.won, leads: myRow.leads, closeRate: myRow.closeRate, calls: myRow.calls, programs: myRow.programsTotal, avgDeal: myRow.won ? Math.round(myRow.revenue / myRow.won) : null } : {},
-          goals: myGoals.map(g => { const p = scorecardPacing(g.metric_key, g, actualFor(g, myRow)); return { metric: SC_METRICS[g.metric_key]?.label, target: g.target_value, current: actualFor(g, myRow), status: p?.statusLabel, percentToGoal: p?.percentToGoal, projectedFinish: p?.projectedFinish, gap: p?.gap, daysLeft: p?.daysLeft }; }),
-          followUp: myRow ? { needsFollowUp: myRow.needsFollowUp, staleEstimates: myRow.staleEstimates, followUpRate: myRow.followUpRate, coldDeals: (myRow.topDeals || []).map(d => ({ name: d.name, amount: d.amount, daysCold: d.daysSince, stage: d.stage })) } : {},
-        }}/>
-        <div style={{height:32}}/>
+  // Manager drilled into a single rep
+  if (selectedRep) {
+    const repRow = rows.find(r => r.name === selectedRep);
+    const repEmail = (REP_DIRECTORY.find(r => r.name === selectedRep) || {}).email || '';
+    return (
+      <div className="data-view-scroll">
+        {form && <ScGoalForm initial={form} reps={REP_DIRECTORY} currentUser={currentUser} isManager onSave={saveGoal} onClose={() => setForm(null)} busy={saving}/>}
+        <RepScorecardBody repRow={repRow} repEmail={repEmail} repName={selectedRep} repGoals={goalsByRep[repEmail]}
+          rangeLabel={rangeLabel} loading={loading} followupsLoaded={!!followups} sendMessage={sendMessage}
+          onSetGoal={e => setForm({ rep_email: e })} onEditGoal={g => setForm(g)} onBack={() => setSelectedRep(null)}/>
       </div>
     );
   }
@@ -2190,6 +2223,27 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
             : 'Call activity unavailable — grant the HubSpot private app the “crm.objects.calls.read” scope.'}
         </div>
       )}
+
+      {/* Team rollup */}
+      {(() => {
+        const teamRev = rows.reduce((s, r) => s + (r.revenue || 0), 0);
+        const teamWon = rows.reduce((s, r) => s + (r.won || 0), 0);
+        const teamGap = rows.reduce((s, r) => s + (r.needsFollowUp || 0), 0);
+        const activeGoals = goals.filter(g => g.status === 'active' || !g.status);
+        const onPace = activeGoals.filter(g => { const p = scorecardPacing(g.metric_key, g, actualFor(g, rowForEmail((g.rep_email||'').toLowerCase()))); return p && p.paced !== false && (p.status === 'ahead' || p.status === 'on_track'); }).length;
+        const ROLL = [
+          { label: 'Team Revenue', v: fmt$(teamRev) },
+          { label: 'New Customers', v: teamWon },
+          { label: 'Close Rate', v: liveStats?.hubspot?.closeRate != null ? `${liveStats.hubspot.closeRate}%` : '–' },
+          { label: 'Follow-Up Gap', v: followups ? teamGap : '…', warn: teamGap > 0 },
+          { label: 'Goals On Pace', v: activeGoals.length ? `${onPace}/${activeGoals.length}` : '–' },
+        ];
+        return (
+          <div className="sc-roll-grid">
+            {ROLL.map(c => <div key={c.label} className={`sc-roll${c.warn ? ' sc-roll-warn' : ''}`}><div className="sc-roll-lbl">{c.label}</div><div className="sc-roll-val">{c.v}</div></div>)}
+          </div>
+        );
+      })()}
 
       {/* Rep goal pacing — who's ahead / behind */}
       {goals.length > 0 && (
@@ -2215,7 +2269,7 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
           <div className="dv-col-num">Revenue</div>
         </div>
         {rows.map(r => (
-          <div key={r.name} className="dv-table-row" onClick={() => sendMessage(`Give me a performance review of ${r.name.split(' ')[0]} for ${rangeLabel} — calls, emails, leads, close rate, and revenue. What should they focus on?`)}>
+          <div key={r.name} className="dv-table-row" onClick={() => setSelectedRep(r.name)} title="Open full scorecard">
             <div className="dv-col-main dv-rep-name">
               {r.name}{r.note && <span className="rep-tag">{r.note}</span>}
               <div className="sc-activity-bar"><div className="sc-activity-fill" style={{width:`${Math.round(r.activity/maxAct*100)}%`}}/></div>
