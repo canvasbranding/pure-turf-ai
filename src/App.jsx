@@ -1956,6 +1956,65 @@ function ScGoalForm({ initial, reps, currentUser, isManager, onSave, onClose, bu
   );
 }
 
+// Inline AI coach — on demand, fetches structured coaching grounded in the scorecard
+// data and renders it as cards (status, risk, opportunity, today's actions, follow focus).
+function ScCoach({ role, name, period, context }) {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const isMgr = role === 'manager';
+  const run = async () => {
+    setLoading(true); setErr('');
+    try {
+      const res = await fetch('/.netlify/functions/scorecard-coach', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, name, period, context }) });
+      const d = await res.json();
+      if (d.ok && d.coaching) setData(d.coaching); else setErr(d.error || 'Coaching unavailable right now.');
+    } catch { setErr('Coaching unavailable right now.'); } finally { setLoading(false); }
+  };
+  if (!data) {
+    return (
+      <div>
+        <button className="sc-coach-cta" onClick={run} disabled={loading}>
+          <Icon name="briefing" size={16}/>
+          <span>{loading ? 'Thinking through your numbers…' : isMgr ? 'Generate team coaching' : "Get today's coaching"}</span>
+          {!loading && <Icon name="arrowR" size={13}/>}
+        </button>
+        {err && <div className="sc-coach-err">{err}</div>}
+      </div>
+    );
+  }
+  if (data.raw) return <div className="sc-coach"><div className="sc-coach-lead">{data.raw}</div></div>;
+  return (
+    <div className="sc-coach">
+      <div className="sc-coach-hdr"><Icon name="briefing" size={14}/><span>AI Coach</span><button className="sc-coach-refresh" onClick={run} disabled={loading} aria-label="Refresh">{loading ? '…' : '↻'}</button></div>
+      {isMgr ? (
+        <>
+          <div className="sc-coach-lead">{data.teamSummary}</div>
+          <div className="sc-coach-grid">
+            <div className="sc-coach-cell"><div className="sc-coach-k">Improved</div><div>{data.improved}</div></div>
+            <div className="sc-coach-cell"><div className="sc-coach-k">Slipped</div><div>{data.slipped}</div></div>
+          </div>
+          {data.coachingAngle && <div className="sc-coach-note"><strong>Angle:</strong> {data.coachingAngle}</div>}
+          {data.dealsToDiscuss?.length > 0 && <div className="sc-coach-sec"><div className="sc-coach-k">Raise in the sales meeting</div><ul>{data.dealsToDiscuss.map((x, i) => <li key={i}>{x}</li>)}</ul></div>}
+          {data.oneOnOneQuestions?.length > 0 && <div className="sc-coach-sec"><div className="sc-coach-k">1:1 questions</div><ul>{data.oneOnOneQuestions.map((x, i) => <li key={i}>{x}</li>)}</ul></div>}
+          {data.commitment && <div className="sc-coach-note"><strong>Next week:</strong> {data.commitment}</div>}
+        </>
+      ) : (
+        <>
+          {data.status && <div className="sc-coach-lead"><span className="sc-coach-status">{data.status}</span> — {data.statusReason}</div>}
+          <div className="sc-coach-grid">
+            <div className="sc-coach-cell"><div className="sc-coach-k">Biggest risk</div><div>{data.biggestRisk}</div></div>
+            <div className="sc-coach-cell"><div className="sc-coach-k">Best opportunity</div><div>{data.bestOpportunity}</div></div>
+          </div>
+          {data.actions?.length > 0 && <div className="sc-coach-sec"><div className="sc-coach-k">Today's top actions</div><ol>{data.actions.map((x, i) => <li key={i}>{x}</li>)}</ol></div>}
+          {data.followFocus && <div className="sc-coach-note"><strong>Follow up first:</strong> {data.followFocus}</div>}
+          {data.coachingNote && <div className="sc-coach-note sc-coach-encourage">{data.coachingNote}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
 function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }) {
   const [activity, setActivity] = React.useState(null);
   const [followups, setFollowups] = React.useState(null);
@@ -2104,10 +2163,12 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
           </>
         )}
 
-        <button className="dv-ai-btn" style={{marginTop:16}} onClick={() => sendMessage(`Coach me on my sales scorecard for ${rangeLabel}. I have ${myRow?.leads||0} leads, ${myRow?.won||0} won, ${myRow?.closeRate??'–'}% close rate, ${myRow ? fmt$(myRow.revenue) : '$0'} revenue, ${myRow?.calls||0} calls.${myRow?.needsFollowUp ? ` I have ${myRow.needsFollowUp} open deals with no follow-up in 7+ days${myRow.topDeals.length ? `, biggest: ${myRow.topDeals.slice(0,5).map(d=>`${d.name} (${fmt$(d.amount)}, ${d.daysSince==null?'never contacted':`${d.daysSince}d cold`})`).join('; ')}` : ''}.` : ''}${myGoals.length ? ` My goals: ${myGoals.map(g=>`${SC_METRICS[g.metric_key]?.label} target ${g.target_value}`).join(', ')}.` : ''} Give me: my status, biggest risk, best opportunity, and my top 3 specific actions today (name the exact deals to follow up first).`)}>
-          <span>What should I do today?</span>
-          <Icon name="arrowR" size={13}/>
-        </button>
+        <div className="dv-section-label" style={{margin:'18px 0 8px'}}>Coaching</div>
+        <ScCoach role="rep" name={currentUser?.name?.split(' ')[0] || 'rep'} period={rangeLabel} context={{
+          metrics: myRow ? { revenue: myRow.revenue, newCustomers: myRow.won, leads: myRow.leads, closeRate: myRow.closeRate, calls: myRow.calls, programs: myRow.programsTotal, avgDeal: myRow.won ? Math.round(myRow.revenue / myRow.won) : null } : {},
+          goals: myGoals.map(g => { const p = scorecardPacing(g.metric_key, g, actualFor(g, myRow)); return { metric: SC_METRICS[g.metric_key]?.label, target: g.target_value, current: actualFor(g, myRow), status: p?.statusLabel, percentToGoal: p?.percentToGoal, projectedFinish: p?.projectedFinish, gap: p?.gap, daysLeft: p?.daysLeft }; }),
+          followUp: myRow ? { needsFollowUp: myRow.needsFollowUp, staleEstimates: myRow.staleEstimates, followUpRate: myRow.followUpRate, coldDeals: (myRow.topDeals || []).map(d => ({ name: d.name, amount: d.amount, daysCold: d.daysSince, stage: d.stage })) } : {},
+        }}/>
         <div style={{height:32}}/>
       </div>
     );
@@ -2212,14 +2273,11 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
         })}
       </div>
 
-      <button className="dv-ai-btn" onClick={() => {
-        const totalGap = rows.reduce((s, r) => s + (r.needsFollowUp || 0), 0);
-        const worst = rows.filter(r => r.needsFollowUp > 0).sort((a, b) => b.needsFollowUp - a.needsFollowUp).slice(0, 3).map(r => `${r.name.split(' ')[0]} (${r.needsFollowUp})`).join(', ');
-        sendMessage(`Give me a sales team scorecard analysis for ${rangeLabel} — who's ahead/on track/behind/at risk, who needs coaching, and the biggest opportunity today.${totalGap ? ` Across the team there are ${totalGap} open deals with no follow-up in 7+ days (most: ${worst}).` : ''} Make it specific: name reps and deals, and suggest 1:1 talking points.`);
-      }}>
-        <span>Ask AI for team coaching</span>
-        <Icon name="arrowR" size={13}/>
-      </button>
+      <div className="dv-section-label" style={{margin:'18px 0 8px'}}>Team Coaching</div>
+      <ScCoach role="manager" name="team" period={rangeLabel} context={{
+        reps: rows.map(r => ({ name: r.name, revenue: r.revenue, won: r.won, leads: r.leads, closeRate: r.closeRate, calls: r.calls, needsFollowUp: r.needsFollowUp, staleEstimates: r.staleEstimates, followUpRate: r.followUpRate, topColdDeal: r.topDeals?.[0] ? { name: r.topDeals[0].name, amount: r.topDeals[0].amount, daysCold: r.topDeals[0].daysSince } : null })),
+        goals: goals.map(g => ({ rep: g.rep_name, metric: SC_METRICS[g.metric_key]?.label, target: g.target_value })),
+      }}/>
       <div style={{height:32}}/>
     </div>
   );
