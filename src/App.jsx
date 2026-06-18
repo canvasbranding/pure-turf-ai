@@ -1905,7 +1905,7 @@ function ScGoalCard({ goal, actual, canEdit, onEdit }) {
 }
 
 // Create / edit a goal — practical, not an academic SMART worksheet.
-function ScGoalForm({ initial, reps, currentUser, isManager, onSave, onClose, busy }) {
+function ScGoalForm({ initial, reps, currentUser, isManager, onSave, onClose, onDelete, busy }) {
   const [f, setF] = React.useState({ rep_email: currentUser.email, metric_key: 'revenue', title: '', target_value: '', period_type: 'monthly', notes: '', ...(initial || {}) });
   const meta = SC_METRICS[f.metric_key];
   const up = (k, v) => setF(p => ({ ...p, [k]: v }));
@@ -1952,6 +1952,7 @@ function ScGoalForm({ initial, reps, currentUser, isManager, onSave, onClose, bu
           <input value={f.notes || ''} onChange={e => up('notes', e.target.value)} placeholder="Context for this goal"/>
         </label>
         <div className="sc-modal-actions">
+          {f.id && onDelete && <button className="sc-btn-danger" style={{marginRight:'auto'}} disabled={busy} onClick={() => onDelete(f)}>Delete</button>}
           <button className="sc-btn-ghost" onClick={onClose}>Cancel</button>
           <button className="sc-btn-primary" disabled={busy || !f.target_value} onClick={submit}>{busy ? 'Saving…' : 'Save goal'}</button>
         </div>
@@ -2147,6 +2148,17 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
     } finally { setSaving(false); }
   };
 
+  const deleteGoal = async (goal) => {
+    if (!goal?.id) { setForm(null); return; }
+    if (!window.confirm(`Delete this goal${goal.title ? ` “${goal.title}”` : ''}? This can’t be undone.`)) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/.netlify/functions/scorecard-goals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: goal.id, requester_email: currentUser.email }) });
+      const d = await res.json();
+      if (d.ok) { setForm(null); loadGoals(); } else window.alert(d.error || 'Could not delete goal');
+    } finally { setSaving(false); }
+  };
+
   const rangeLabel = DATE_RANGES[dateRange]?.label || 'Month to date';
   const fmt$ = v => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v||0}`;
   const board = (liveStats?.hubspot?.repLeaderboard || []).filter(r => r.name !== 'Unassigned');
@@ -2193,7 +2205,7 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
     const myRow = rows.find(r => currentUser?.name && r.name.toLowerCase().includes(currentUser.name.split(' ')[0].toLowerCase())) || rowForEmail(myEmail);
     return (
       <div className="data-view-scroll">
-        {form && <ScGoalForm initial={form} reps={[{ email: myEmail, name: currentUser?.name }]} currentUser={currentUser} isManager={false} onSave={saveGoal} onClose={() => setForm(null)} busy={saving}/>}
+        {form && <ScGoalForm initial={form} reps={[{ email: myEmail, name: currentUser?.name }]} currentUser={currentUser} isManager={false} onSave={saveGoal} onDelete={deleteGoal} onClose={() => setForm(null)} busy={saving}/>}
         <RepScorecardBody repRow={myRow} repEmail={myEmail} repName={currentUser?.name} repGoals={goalsByRep[myEmail]}
           rangeLabel={rangeLabel} loading={loading} followupsLoaded={!!followups} sendMessage={sendMessage}
           onSetGoal={e => setForm({ rep_email: e })} onEditGoal={g => setForm(g)}/>
@@ -2207,7 +2219,7 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
     const repEmail = (REP_DIRECTORY.find(r => r.name === selectedRep) || {}).email || '';
     return (
       <div className="data-view-scroll">
-        {form && <ScGoalForm initial={form} reps={REP_DIRECTORY} currentUser={currentUser} isManager onSave={saveGoal} onClose={() => setForm(null)} busy={saving}/>}
+        {form && <ScGoalForm initial={form} reps={REP_DIRECTORY} currentUser={currentUser} isManager onSave={saveGoal} onDelete={deleteGoal} onClose={() => setForm(null)} busy={saving}/>}
         <RepScorecardBody repRow={repRow} repEmail={repEmail} repName={selectedRep} repGoals={goalsByRep[repEmail]}
           rangeLabel={rangeLabel} loading={loading} followupsLoaded={!!followups} sendMessage={sendMessage}
           onSetGoal={e => setForm({ rep_email: e })} onEditGoal={g => setForm(g)} onBack={() => setSelectedRep(null)}/>
@@ -2218,7 +2230,7 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
   // ── MANAGER / LEADERSHIP VIEW: "Team Sales Performance" ───────────────────
   return (
     <div className="data-view-scroll">
-      {form && <ScGoalForm initial={form} reps={REP_DIRECTORY} currentUser={currentUser} isManager onSave={saveGoal} onClose={() => setForm(null)} busy={saving}/>}
+      {form && <ScGoalForm initial={form} reps={REP_DIRECTORY} currentUser={currentUser} isManager onSave={saveGoal} onDelete={deleteGoal} onClose={() => setForm(null)} busy={saving}/>}
       <div className="dv-header">
         <div><div className="dv-eyebrow">Team Sales Performance · {rangeLabel}</div><h2 className="dv-title">Team Scorecard</h2></div>
         <button className="sc-add-btn" onClick={() => setForm({})}>+ Set a goal</button>
