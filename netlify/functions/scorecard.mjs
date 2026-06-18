@@ -12,11 +12,13 @@ const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
 // Sales reps = owners we have names for, minus admin/non-sales staff.
 const SALES_REP_IDS = Object.keys(OWNER_NAMES).filter(id => !NON_SALES_STAFF.has(id));
 
-// Count engagements (calls/emails) per owner for the period, via the Search API.
+// Count engagements (calls/emails) per owner for the period. HubSpot's Search API returns
+// the matching `total` for free, so we run ONE tiny query per rep (limit:1, reading total)
+// instead of paging through every engagement record. ~8 quick queries vs 120+ pages — this
+// is what fixed the ~20s scorecard load.
 async function activityByOwner(objectType, fromEpochMs) {
   const counts = {};
-  let after = 0;
-  for (let page = 0; page < 60; page++) {
+  await Promise.all(SALES_REP_IDS.map(async (id) => {
     const res = await hubspotGet(
       `https://api.hubapi.com/crm/v3/objects/${objectType}/search`,
       HUBSPOT_TOKEN,
@@ -26,24 +28,16 @@ async function activityByOwner(objectType, fromEpochMs) {
         body: JSON.stringify({
           filterGroups: [{ filters: [
             { propertyName: 'hs_timestamp', operator: 'GTE', value: String(fromEpochMs) },
-            { propertyName: 'hubspot_owner_id', operator: 'IN', values: SALES_REP_IDS },
+            { propertyName: 'hubspot_owner_id', operator: 'EQ', value: id },
           ] }],
-          properties: ['hubspot_owner_id'],
-          limit: 100,
-          ...(after ? { after: String(after) } : {}),
+          limit: 1,
         }),
       } },
     );
     if (!res.ok) throw new Error(`${objectType} ${res.status}: ${await res.text()}`);
     const data = await res.json();
-    (data.results || []).forEach(r => {
-      const o = r.properties?.hubspot_owner_id;
-      if (o) counts[o] = (counts[o] || 0) + 1;
-    });
-    const total = data.total || 0;
-    after += 100;
-    if (after >= total || after >= 10000) break;
-  }
+    counts[id] = data.total || 0;
+  }));
   return counts;
 }
 
