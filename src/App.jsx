@@ -2346,7 +2346,7 @@ function RevenueRescueView({ liveStats, sendMessage, currentUser, perms }) {
             ))}
           </div>
           <div className="rq-src-caveat">
-            ⚠ <strong>Deal-level attribution — Google is understated.</strong> Deals are created at estimate time with no web session, so most phone leads land in “Phone / Offline.” At the contact level (Aircall tracking numbers), <strong>59% of leads dial a Google Business Profile line</strong> — so the bulk of “Phone / Offline” revenue is really Google. The “Google Ads” row is paid-search PPC only.
+            ⚠ <strong>Deal-level revenue — Google is understated here.</strong> These cards bucket by the deal’s web/tag source, so phone-driven revenue piles into “Phone / Offline.” By Aircall tracking number (contact level), the lead mix is actually <strong>~59% Google GBP+LSA and ~20% Google PPC</strong> — so most “Phone / Offline” revenue is really Google. A contact-level revenue re-attribution is needed to make these dollar figures exact.
           </div>
         </>
       )}
