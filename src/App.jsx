@@ -3401,7 +3401,7 @@ function AppInner() {
                   }[mainView] || 'Dashboard')}
                 </span>
                 <div className="mobile-header-right">
-                  {mobileTab !== 'chat' && (
+                  {mobileTab !== 'chat' && !['scorecard','search','finance'].includes(mainView) && (
                     <select className="range-picker" value={dateRange} onChange={e=>setDateRange(e.target.value)}>
                       {Object.entries(DATE_RANGES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                     </select>
@@ -3426,9 +3426,11 @@ function AppInner() {
                 {!isMobile && (
                 <div className="left-col-hdr">
                   <DataHealthBanner variant="inline" liveStats={liveStats} statsLoading={statsLoading}/>
-                  <select className="range-picker" value={dateRange} onChange={e=>setDateRange(e.target.value)}>
-                    {Object.entries(DATE_RANGES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-                  </select>
+                  {!['scorecard','search','finance'].includes(mainView) && (
+                    <select className="range-picker" value={dateRange} onChange={e=>setDateRange(e.target.value)}>
+                      {Object.entries(DATE_RANGES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  )}
                 </div>
                 )}
                 {isMobile && <DataHealthBanner variant="inline" liveStats={liveStats} statsLoading={statsLoading}/>}
