@@ -2076,10 +2076,10 @@ function RepScorecardBody({ repRow, repEmail, repName, repGoals, rangeLabel, loa
           ) : (
             <div className="sc-fu-list">
               {repRow.topDeals.map((d, i) => (
-                <div key={i} className="sc-fu-row" onClick={() => sendMessage(`Help ${mine ? 'me' : first} write a follow-up for the deal "${d.name}" (${fmt$(d.amount)}, ${d.stage}, ${d.daysSince == null ? 'never contacted' : `${d.daysSince} days cold`}). What should the message say and what's the next step?`)}>
+                <div key={i} className="sc-fu-row" onClick={() => sendMessage(`Help ${mine ? 'me' : first} move the deal "${d.name}" (${fmt$(d.amount)}, ${d.stage}, ${d.ageDays != null ? `sent ${d.ageDays} days ago` : ''}, ${d.daysSince == null ? 'no logged deal activity' : `${d.daysSince} days since a logged touch`}). What should the next step be — push to close, or has it gone quiet?`)}>
                   <div className="sc-fu-main">
                     <div className="sc-fu-name">{d.name}{d.isEstimate && <span className="rep-tag">estimate</span>}</div>
-                    <div className="sc-fu-meta">{fmt$(d.amount)} · {d.daysSince == null ? 'never contacted' : `${d.daysSince}d cold`}</div>
+                    <div className="sc-fu-meta">{fmt$(d.amount)} · {d.ageDays != null ? `sent ${d.ageDays}d ago` : (d.daysSince == null ? 'no logged activity' : `quiet ${d.daysSince}d`)}</div>
                   </div>
                   <Icon name="arrowR" size={12}/>
                 </div>
@@ -2239,7 +2239,7 @@ function ScorecardView({ liveStats, dateRange, sendMessage, currentUser, perms }
           { label: 'Team Revenue', v: fmt$(teamRev) },
           { label: 'New Customers', v: teamWon },
           { label: 'Close Rate', v: liveStats?.hubspot?.closeRate != null ? `${liveStats.hubspot.closeRate}%` : '–' },
-          { label: 'Follow-Up Gap', v: followups ? teamGap : '…', warn: teamGap > 0 },
+          { label: 'Aging Estimates', v: followups ? teamGap : '…', warn: teamGap > 0 },
           { label: 'Goals On Pace', v: activeGoals.length ? `${onPace}/${activeGoals.length}` : '–' },
         ];
         return (

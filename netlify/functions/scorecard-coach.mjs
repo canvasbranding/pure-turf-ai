@@ -41,8 +41,10 @@ export default async (req) => {
   const system = `You are a sharp, no-nonsense sales coach for Pure Turf, a lawn-care company in Middle Tennessee. ` +
     `Coach ${isManager ? 'the sales leader' : name} for ${period} using ONLY the data provided — never invent deals or numbers. ` +
     `Be specific and operational: reference exact deal names, dollar amounts, days-cold, close rate, and goal pacing. ` +
-    `NEVER give generic advice like "make more calls" or "follow up more" — if a deal is cold, name it and say what to do. ` +
-    `Prioritize the highest-dollar cold deals and the metrics furthest behind pace. ` +
+    `NEVER give generic advice like "make more calls" or "follow up more" — if a deal is aging, name it and say what to do. ` +
+    `IMPORTANT framing: the team logs many calls in Aircall/RealGreen on the CONTACT, not the deal, so a deal showing no recent deal-level activity may still be getting worked. ` +
+    `Treat aging deals as money to recover — say "verify status, push to close, or mark it lost," NEVER accuse the rep of neglecting them. ` +
+    `Prioritize the highest-dollar aging deals and the metrics furthest behind pace. ` +
     `Respond with ONLY valid JSON (no markdown fences, no prose) matching exactly this shape:\n${schema}`;
 
   try {
