@@ -1088,10 +1088,12 @@ html[data-theme="dark"] .goal-card { background:rgba(255,255,255,0.04); }
 
 /* ══ GOAL ADMIN PANEL ════════════════════════════════════════ */
 .admin-tabs {
-  display:flex; gap:4px; margin-bottom:20px;
+  display:flex; align-items:center; gap:4px; margin-bottom:20px;
   background:var(--surface); border:1px solid var(--border);
   border-radius:10px; padding:4px;
-  overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
+  /* overflow-y:hidden is required: overflow-x:auto implies y:auto, which on iOS Safari
+     collapses this flex-item's height to a thin line. align-items keeps buttons natural-height. */
+  overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:none;
 }
 .admin-tabs::-webkit-scrollbar { display:none; }
 .admin-tab {
