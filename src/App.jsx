@@ -1869,7 +1869,7 @@ function ScGoalCard({ goal, actual, canEdit, onEdit }) {
 
 // Create / edit a goal — practical, not an academic SMART worksheet.
 function ScGoalForm({ initial, reps, currentUser, isManager, onSave, onClose, busy }) {
-  const [f, setF] = React.useState(initial || { rep_email: currentUser.email, metric_key: 'revenue', title: '', target_value: '', period_type: 'monthly', notes: '' });
+  const [f, setF] = React.useState({ rep_email: currentUser.email, metric_key: 'revenue', title: '', target_value: '', period_type: 'monthly', notes: '', ...(initial || {}) });
   const meta = SC_METRICS[f.metric_key];
   const up = (k, v) => setF(p => ({ ...p, [k]: v }));
   const submit = () => {
