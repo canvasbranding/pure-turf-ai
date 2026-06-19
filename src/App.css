@@ -753,7 +753,12 @@ html[data-theme="light"] .skel::after { background:linear-gradient(90deg,transpa
 .admin-back  { display:flex; align-items:center; gap:5px; background:var(--card); border:1px solid var(--border); border-radius:var(--r-xs); padding:7px 12px; font-family:var(--font); font-size:12px; color:var(--text-2); cursor:pointer; box-shadow:var(--shadow-sm); transition:all 0.15s; }
 .admin-back:hover { border-color:var(--border-md); color:var(--text); }
 .admin-note { font-size:11.5px; color:var(--text-3); line-height:1.55; padding-top:12px; border-top:1px solid var(--border); }
-.perm-table { background:var(--card); border:1px solid var(--border); border-radius:var(--r-sm); overflow:hidden; box-shadow:var(--shadow-sm); }
+.perm-table { background:var(--card); border:1px solid var(--border); border-radius:var(--r-sm); box-shadow:var(--shadow-sm);
+  /* width:100% + overflow-x:auto so wide tables (esp. Permissions' 15 columns) scroll
+     horizontally on mobile instead of being clipped; overflow-y:hidden avoids the iOS collapse. */
+  width:100%; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+.perm-table-wide .perm-row { min-width:740px; }
+.perm-table-mid  .perm-row { min-width:460px; }
 .perm-row { display:flex; align-items:center; border-bottom:1px solid var(--border); padding:10px 14px; }
 .perm-row:last-child { border-bottom:none; }
 .perm-hdr { background:var(--surface); }
@@ -788,6 +793,10 @@ html[data-theme="light"] .skel::after { background:linear-gradient(90deg,transpa
   .main-area { width:100%; flex:1; display:flex; flex-direction:column; overflow:hidden; }
   /* The mobile header already shows the active range; drop the duplicate in-view pill. */
   .dv-period { display:none !important; }
+  /* Admin: reflow the budget grid and tighten the user column so tables fit / scroll cleanly. */
+  .budget-grid { grid-template-columns:repeat(2,1fr); }
+  .admin-scroll { padding:20px 14px; }
+  .perm-user-col { flex:0 0 136px; }
 
   /* ---- Topbar ---- */
   .topbar { display:none; }
@@ -1471,7 +1480,9 @@ html[data-theme="dark"] .chat-input-inner {
 .admin-role-select { font-size:11.5px; height:30px; padding:0 8px; border-radius:7px; }
 
 /* Users table */
-.admin-users-table { background:var(--card); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; box-shadow:var(--shadow-sm); }
+.admin-users-table { background:var(--card); border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow-sm);
+  width:100%; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+.admin-user-hdr, .admin-user-row { min-width:480px; }
 html[data-theme="dark"] .admin-users-table { background:rgba(255,255,255,0.04); }
 .admin-user-hdr { display:flex; align-items:center; padding:8px 16px; background:var(--surface); border-bottom:1px solid var(--border); font-size:9px; font-weight:600; letter-spacing:0.09em; text-transform:uppercase; color:var(--text-3); }
 .admin-user-row { display:flex; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border); transition:background 0.12s; }

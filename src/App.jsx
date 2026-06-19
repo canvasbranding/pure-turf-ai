@@ -784,7 +784,7 @@ function GoalsView({ currentUser, liveStats, statsLoading, dateRange, goalTarget
 // Reads YTD actuals and tracks them against the shared company/finance/sales targets
 // with progress bars, pacing markers (where you should be for this point in the year),
 // and a green/amber/red status. Finance area is gated to finance-cleared viewers.
-function GoalTrackingView({ orgGoals, perms, sendMessage }) {
+function GoalTrackingView({ orgGoals, perms, sendMessage, currentUser }) {
   const [ytd, setYtd] = React.useState(null);
   React.useEffect(() => {
     fetch('/.netlify/functions/stats?range=ytd').then(r => r.json()).then(setYtd).catch(() => {});
@@ -1686,7 +1686,7 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
                 <div className="admin-section-label">Individual rep targets</div>
                 <div className="admin-section-hint">Reps see their own targets on their Goals tab.</div>
               </div>
-              <div className="perm-table">
+              <div className="perm-table perm-table-mid">
                 <div className="perm-row perm-hdr">
                   <div className="perm-user-col">Rep</div>
                   <div className="perm-mod-col" style={{flex:'0 0 140px',justifyContent:'flex-start',paddingLeft:8}}>Leads / mo</div>
@@ -1738,7 +1738,7 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
                 <div className="admin-section-hint">Override default role permissions for individual users.</div>
                 <div className="admin-section-hint" style={{marginTop:6}}>“Admin Area” only opens the goals &amp; budget tabs. <strong>Permissions, Users, and the Query Log stay restricted to the Admin role (you)</strong> regardless of these toggles.</div>
               </div>
-              <div className="perm-table">
+              <div className="perm-table perm-table-wide">
                 <div className="perm-row perm-hdr">
                   <div className="perm-user-col">User</div>
                   {Object.entries(MODULE_LABELS).filter(([k]) => k !== 'manageUsers').map(([k,v]) => (
@@ -1786,7 +1786,7 @@ function AdminPanel({ sidebarOpen, setSidebarOpen, currentUser, signOut, toggleT
                     </div>
                     <div className="admin-section-hint">New account requests waiting for your review.</div>
                   </div>
-                  <div className="perm-table" style={{marginBottom:28}}>
+                  <div className="perm-table perm-table-mid" style={{marginBottom:28}}>
                     <div className="perm-row perm-hdr">
                       <div className="perm-user-col">Requested by</div>
                       <div className="perm-mod-col" style={{flex:'0 0 130px',justifyContent:'flex-start',paddingLeft:8}}>Assign role</div>
