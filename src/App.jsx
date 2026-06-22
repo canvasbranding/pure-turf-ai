@@ -3909,8 +3909,15 @@ function AppInner() {
         });
       }
     }
-    // Keep following the text as it streams in.
-    if (msgsRef.current) msgsRef.current.scrollTo({ top: msgsRef.current.scrollHeight, behavior: 'smooth' });
+    // Follow the streaming text — but ONLY if the user is already near the bottom. If they've
+    // scrolled up to read, don't yank them back down; still snap down on a new user message.
+    const el = msgsRef.current;
+    if (el) {
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      if (last.role === 'user' || nearBottom) {
+        el.scrollTo({ top: el.scrollHeight, behavior: last.role === 'user' ? 'smooth' : 'auto' });
+      }
+    }
   }, [messages]);
 
   // ── INPUT ──────────────────────────────────────────────────────────────
