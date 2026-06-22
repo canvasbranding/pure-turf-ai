@@ -3152,6 +3152,99 @@ function KeywordAccordion({ terms }) {
   );
 }
 
+// Competitive snapshot — local-map rank + reputation, organic SEO, and keyword gaps.
+// Data is a dated snapshot from Search Atlas (see _shared/competitors.mjs).
+function CompetitorsPanel({ comp, sendMessage }) {
+  if (!comp) return null;
+  const lm = comp.localMap, web = comp.web;
+  const fmtRank = r => (r == null ? '–' : `#${r}`);
+  const fmtT = n => (n == null ? '–' : n >= 1e4 ? `${Math.round(n/1e3)}K` : n.toLocaleString());
+  // Local map: us first, then competitors by rank.
+  const mapRows = lm ? [{ ...lm.us, us: true }, ...lm.rows] : [];
+  // Web: us first, then competitors as given (already roughly weakest→strongest, regional last).
+  const webRows = web ? [{ ...web.us, us: true, scope: 'us' }, ...web.rows] : [];
+  return (
+    <>
+      <div className="dv-section-label" style={{marginTop:20}}>
+        Competitors · How We Stack Up
+        {comp.snapshotDate && <span className="dv-section-note" style={{opacity:1}}>snapshot {comp.snapshotDate.slice(5).replace('-', '/')}</span>}
+      </div>
+
+      {/* Local map rank + reputation */}
+      {lm && (
+        <>
+          <div className="cmp-sub">Local map · {lm.market}</div>
+          <div className="cmp-table">
+            <div className="cmp-head">
+              <div className="cmp-c-name">Business</div>
+              <div className="cmp-c-num">Map rank</div>
+              <div className="cmp-c-num">Rating</div>
+              <div className="cmp-c-num">Reviews</div>
+            </div>
+            {mapRows.map((r, i) => (
+              <div key={i} className={`cmp-row${r.us ? ' cmp-us' : ''}`}>
+                <div className="cmp-c-name">{r.name}{r.us && <span className="cmp-tag">us</span>}</div>
+                <div className="cmp-c-num">{fmtRank(r.avgRank)}</div>
+                <div className="cmp-c-num">{r.rating}★</div>
+                <div className="cmp-c-num cmp-strong">{r.reviews?.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+          <div className="cmp-note">The big regional names — Weed Man, Virginia Green, Second Nature — don’t rank in our local grid at all. We out-rank them where it counts.</div>
+        </>
+      )}
+
+      {/* Organic / website SEO */}
+      {web && (
+        <>
+          <div className="cmp-sub" style={{marginTop:14}}>Website / organic SEO</div>
+          <div className="cmp-table">
+            <div className="cmp-head">
+              <div className="cmp-c-name">Domain</div>
+              <div className="cmp-c-num">Traffic/mo</div>
+              <div className="cmp-c-num">Keywords</div>
+              <div className="cmp-c-num">Authority</div>
+            </div>
+            {webRows.map((r, i) => (
+              <div key={i} className={`cmp-row${r.us ? ' cmp-us' : ''}`} title={r.note || ''}>
+                <div className="cmp-c-name">
+                  {r.name}{r.us && <span className="cmp-tag">us</span>}
+                  {r.scope && r.scope !== 'us' && r.scope !== 'local' && <span className="cmp-scope">{r.scope}</span>}
+                </div>
+                <div className="cmp-c-num cmp-strong">{fmtT(r.traffic)}</div>
+                <div className="cmp-c-num">{fmtT(r.keywords)}</div>
+                <div className="cmp-c-num">{r.domainPower ?? '–'}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Keyword gaps */}
+      {comp.gaps?.length > 0 && (
+        <>
+          <div className="cmp-sub" style={{marginTop:14}}>Keyword gaps · terms to win <span className="cmp-sub-note">they rank, we don’t</span></div>
+          <div className="dv-table">
+            {comp.gaps.map((k, i) => (
+              <div key={i} className="dv-table-row cmp-gap" onClick={() => sendMessage(`We don't rank for "${k.keyword}" (~${k.volume.toLocaleString()} searches/mo) but competitors do. Draft a plan — page or content — to start ranking for it.`)}>
+                <div className="dv-col-main">{k.keyword}</div>
+                <div className="dv-col-num">{k.volume.toLocaleString()}/mo</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {comp.notAvailable && <div className="cmp-note cmp-note-muted">{comp.notAvailable}</div>}
+
+      <button className="dv-ai-btn" style={{marginTop:14}} onClick={() => sendMessage('Give me a competitive analysis: how do we compare to our local lawn-care competitors on map rank, reviews, and SEO — and where can we widen the gap?')}>
+        <span>Ask AI about the competition</span>
+        <Icon name="arrowR" size={13}/>
+      </button>
+    </>
+  );
+}
+
 function SearchVisibilityView({ sendMessage }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -3297,6 +3390,9 @@ function SearchVisibilityView({ sendMessage }) {
               </>
             );
           })()}
+
+          {/* Competitors — how we stack up */}
+          {data?.competitors && <CompetitorsPanel comp={data.competitors} sendMessage={sendMessage} />}
 
           {/* GBP locations */}
           {data?.gbpLocations?.length > 0 && (

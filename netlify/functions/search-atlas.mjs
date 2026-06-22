@@ -5,6 +5,8 @@
 // NOTE: this first pass probes a few endpoints and returns their raw shapes so we can
 // map the real fields, then it'll be tightened into clean aggregates + caching.
 // Each Search Atlas product lives on its own subdomain (per the OpenAPI `servers`).
+import { COMPETITORS } from './_shared/competitors.mjs';
+
 const HOST = {
   gsc:     'https://gsc.searchatlas.com',
   keyword: 'https://keyword.searchatlas.com',
@@ -46,7 +48,7 @@ export default async (req) => {
     sa(`${HOST.gbp}/api/gbp/v1/reviews/star-rating-count/`, 'application/json'),
   ]);
 
-  const out = { fetchedAt: new Date().toISOString(), errors: {} };
+  const out = { fetchedAt: new Date().toISOString(), errors: {}, competitors: COMPETITORS };
 
   // ── GSC website search traffic (United States) ──────────────
   if (perf.status === 200) {
